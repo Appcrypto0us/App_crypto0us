@@ -41,11 +41,11 @@ exports.register = async (req, res) => {
     if (fraudCheck.isFraudulent && fraudCheck.fraudScore >= 100) {
       await client.query('ROLLBACK');
       
-      // Log fraud attempt
-      await antiFraudService.logFraudEvent(
+      // Log fraud attempt (no user ID yet - log asynchronously after rollback)
+      antiFraudService.logFraudEvent(
         null, 'high_fraud_score', 'critical',
         fraudCheck, ip, fingerprint
-      );
+      ).catch(e => console.error('Failed to log fraud event:', e.message));
       
       console.warn(`🚫 High fraud score (${fraudCheck.fraudScore}) blocked for ${email}`);
       return res.status(403).json({ 
@@ -63,10 +63,10 @@ exports.register = async (req, res) => {
       
       if (selfReferral.isSelfReferral) {
         // Log self-referral attempt
-        await antiFraudService.logFraudEvent(
+        antiFraudService.logFraudEvent(
           null, 'self_referral', 'high',
           { referral_code, ...selfReferral }, ip, fingerprint
-        );
+        ).catch(e => console.error('Failed to log self-referral:', e.message));
         
         console.warn(`🚫 Self-referral detected for ${email} using code ${referral_code}`);
         
@@ -134,19 +134,6 @@ exports.register = async (req, res) => {
     );
     const user = userResult.rows[0];
 
-    // Record device information
-    await antiFraudService.recordDevice(user.id, req, fingerprint, ip, fraudCheck.vpnDetected);
-
-    // Log fraud triggers if any (account created but flagged)
-    if (fraudCheck.triggers.length > 0) {
-      await antiFraudService.logFraudEvent(
-        user.id, 'fraud_triggers', 'medium',
-        { triggers: fraudCheck.triggers, fraudScore: fraudCheck.fraudScore }, 
-        ip, fingerprint
-      );
-      console.log(`⚠️ User ${email} flagged with triggers: ${fraudCheck.triggers.join(', ')}`);
-    }
-
     // Create wallet
     await client.query(
       'INSERT INTO wallets (user_id, balance, available_balance) VALUES ($1, 0, 0)',
@@ -161,9 +148,39 @@ exports.register = async (req, res) => {
       [user.id, email, otp, expiresAt]
     );
 
+    // ========================================================================
+    // COMMIT TRANSACTION FIRST - User now exists in database
+    // ========================================================================
     await client.query('COMMIT');
 
-    // Send OTP email (async)
+    // ========================================================================
+    // AFTER COMMIT - These operations run AFTER user is committed to database
+    // This fixes the foreign key constraint violation
+    // ========================================================================
+    
+    // Record device information (user ID now exists in database)
+    try {
+      await antiFraudService.recordDevice(user.id, req, fingerprint, ip, fraudCheck.vpnDetected);
+    } catch (deviceError) {
+      console.error('⚠️ Failed to record device (non-critical):', deviceError.message);
+      // Don't fail registration if device recording fails
+    }
+
+    // Log fraud triggers if any (account created but flagged)
+    if (fraudCheck.triggers.length > 0) {
+      try {
+        await antiFraudService.logFraudEvent(
+          user.id, 'fraud_triggers', 'medium',
+          { triggers: fraudCheck.triggers, fraudScore: fraudCheck.fraudScore }, 
+          ip, fingerprint
+        );
+        console.log(`⚠️ User ${email} flagged with triggers: ${fraudCheck.triggers.join(', ')}`);
+      } catch (logError) {
+        console.error('⚠️ Failed to log fraud event:', logError.message);
+      }
+    }
+
+    // Send OTP email (async, non-blocking)
     sendOTP(email, otp).catch(console.error);
 
     res.status(201).json({
