@@ -29,7 +29,7 @@ const FRAUD_CONFIG = {
   SCORE_TIER_SAFE: 20,
   SCORE_TIER_SUSPICIOUS: 49,
   SCORE_TIER_HIGH_RISK: 79,
-  
+
   // Weighted scores (replaces flat increments)
   WEIGHT_SELF_REFERRAL: 100,
   WEIGHT_VPN_SIGNUP: 45,
@@ -73,18 +73,18 @@ const generateFingerprint = (req) => {
     // Browser/OS fingerprint (stable)
     req.headers['user-agent'] || '',
     req.headers['accept-language']?.split(',')[0] || '',
-    
+
     // Client hints (more stable than full UA)
     req.headers['sec-ch-ua'] || '',
     req.headers['sec-ch-ua-platform'] || '',
     req.headers['sec-ch-ua-mobile'] || '',
-    
+
     // Network characteristics (normalized)
     normalizeIPForFingerprint(getClientIP(req)),
-    
+
     // Accept headers (stable preferences)
     req.headers['accept']?.split(',')[0] || '',
-    
+
     // Viewport/Screen hints (if provided)
     req.headers['viewport-width'] || '',
     req.headers['dpr'] || '',
@@ -92,26 +92,26 @@ const generateFingerprint = (req) => {
 
   // Filter out empty values and join
   const fingerprintString = components.filter(c => c).join('|');
-  
+
   return crypto.createHash('sha256').update(fingerprintString).digest('hex');
 };
 
 // Normalize IP for fingerprinting (use /24 for IPv4, /64 for IPv6)
 const normalizeIPForFingerprint = (ip) => {
   if (!ip || ip === '::1' || ip === '127.0.0.1') return 'localhost';
-  
+
   if (ip.includes(':')) {
     // IPv6: keep first 64 bits (4 segments)
     const segments = ip.split(':');
     return segments.slice(0, 4).join(':') + '::/64';
   }
-  
+
   // IPv4: keep /24 (first 3 octets)
   const octets = ip.split('.');
   if (octets.length === 4) {
     return octets.slice(0, 3).join('.') + '.0/24';
   }
-  
+
   return ip;
 };
 
@@ -124,61 +124,61 @@ const getClientIP = (req) => {
   if (forwarded) {
     // X-Forwarded-For: client, proxy1, proxy2
     const ips = forwarded.split(',').map(ip => ip.trim());
-    
+
     // Filter out private/loopback addresses
     const publicIPs = ips.filter(ip => {
       return !isPrivateIP(ip) && ip !== '::1' && ip !== '127.0.0.1';
     });
-    
+
     if (publicIPs.length > 0) {
       return normalizeIP(publicIPs[0]);
     }
-    
+
     // Fallback to first IP
     return normalizeIP(ips[0]);
   }
-  
+
   // Check other proxy headers
   const realIP = req.headers['x-real-ip'] || 
                  req.headers['cf-connecting-ip'] ||  // Cloudflare
                  req.headers['true-client-ip'] ||    // Akamai
                  req.headers['x-cluster-client-ip'];
-                 
+
   if (realIP) {
     return normalizeIP(realIP);
   }
-  
+
   // Fallback to connection IP
   return normalizeIP(req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '0.0.0.0');
 };
 
 const isPrivateIP = (ip) => {
   if (!ip) return true;
-  
+
   // IPv4 private ranges
   if (ip.match(/^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/)) return true;
   if (ip === '127.0.0.1' || ip.startsWith('127.')) return true;
-  
+
   // IPv6 loopback/private
   if (ip === '::1' || ip.startsWith('fc') || ip.startsWith('fd') || ip.startsWith('fe80')) return true;
-  
+
   return false;
 };
 
 const normalizeIP = (ip) => {
   if (!ip || ip === '::1') return '127.0.0.1';
   if (ip === '::ffff:127.0.0.1') return '127.0.0.1';
-  
+
   // Strip IPv6 prefix if present
   if (ip.startsWith('::ffff:')) {
     return ip.substring(7);
   }
-  
+
   return ip.trim();
 };
 
 // ============================================================================
-// VPN/PROXY DETECTION (PRODUCTION-READY STUB)
+// VPN/PROXY DETECTION (PRODUCTION-READY)
 // ============================================================================
 const isVPNorProxy = async (ip) => {
   // Skip check for localhost
@@ -186,29 +186,41 @@ const isVPNorProxy = async (ip) => {
     return { isVpn: false, isProxy: false, isDatacenter: false, confidence: 0 };
   }
 
+  try {
+    // Use ipapi.co (1000 free/day)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FRAUD_CONFIG.VPN_CHECK_TIMEOUT_MS);
+    
+    const response = await fetch(`https://ipapi.co/${ip}/json/`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    
+    const data = await response.json();
+    
+    return {
+      isVpn: data.vpn === true,
+      isProxy: data.proxy === true,
+      isDatacenter: data.hosting === true,
+      confidence: data.hosting === true ? 0.9 : 0.5
+    };
+  } catch (error) {
+    console.error('VPN check failed:', error.message);
+    // Fallback to safe default on error
+    return { isVpn: false, isProxy: false, isDatacenter: false, confidence: 0 };
+  }
+
   // PRODUCTION INTEGRATION POINTS:
-  // Option 1: ipapi.co (1000 free/day)
-   const response = await fetch(`https://ipapi.co/${ip}/json/`, {
-     signal: AbortSignal.timeout(FRAUD_CONFIG.VPN_CHECK_TIMEOUT_MS)
-   });
+  // Option 2: ipinfo.io (50k free/month)
+   const response = await fetch(`https://ipinfo.io/${ip}/json?token=${process.env.IPINFO_TOKEN}`);
    const data = await response.json();
    return {
      isVpn: data.vpn === true,
      isProxy: data.proxy === true,
      isDatacenter: data.hosting === true,
-    confidence: data.hosting === true ? 0.9 : 0.5
+     confidence: 0.85
    };
-  
-  // Option 2: ipinfo.io (50k free/month)
-  // const response = await fetch(`https://ipinfo.io/${ip}/json?token=${process.env.IPINFO_TOKEN}`);
-  // const data = await response.json();
-  // return {
-  //   isVpn: data.vpn === true,
-  //   isProxy: data.proxy === true,
-  //   isDatacenter: data.hosting === true,
-  //   confidence: 0.85
-  // };
-  
+
   // Option 3: MaxMind GeoIP2 Precision (paid, most accurate)
   // const insights = await maxmind.insights(ip);
   // return {
@@ -217,9 +229,6 @@ const isVPNorProxy = async (ip) => {
   //   isDatacenter: insights.traits.isHostingProvider === true,
   //   confidence: 0.95
   // };
-
-  // Placeholder - returns safe default
-  return { isVpn: false, isProxy: false, isDatacenter: false, confidence: 0 };
 };
 
 // ============================================================================
@@ -257,7 +266,7 @@ const checkSignupRateLimit = async (ip, fingerprint) => {
   );
 
   const stats = result.rows[0] || { ip_count: 0, ip_burst_count: 0, fp_count: 0, fp_burst_count: 0 };
-  
+
   const ipCount = parseInt(stats.ip_count);
   const fpCount = parseInt(stats.fp_count);
   const ipBurstCount = parseInt(stats.ip_burst_count);
@@ -315,43 +324,47 @@ const detectSelfReferral = async (referralCode, currentIP, currentFingerprint) =
 };
 
 // ============================================================================
-// MULTI-ACCOUNT DETECTION (ENHANCED WITH CLUSTERING)
+// MULTI-ACCOUNT DETECTION (ENHANCED WITH CLUSTERING - FIXED JSON PARSING)
 // ============================================================================
 const detectMultiAccounting = async (ip, fingerprint) => {
   const normalizedIP = normalizeIPForFingerprint(ip);
   const clusterHours = FRAUD_CONFIG.ACCOUNT_CLUSTER_HOURS;
 
-  // Optimized single query for all multi-account detection
-  const result = await pool.query(
-    `WITH ip_accounts AS (
-       SELECT id, email, phone, created_at, fraud_score,
-              EXTRACT(EPOCH FROM (created_at - LAG(created_at) OVER (ORDER BY created_at)))/3600 as hours_since_prev
-       FROM users 
-       WHERE signup_ip = $1::inet
-     ),
-     fp_accounts AS (
-       SELECT id, email, phone, created_at, fraud_score,
-              EXTRACT(EPOCH FROM (created_at - LAG(created_at) OVER (ORDER BY created_at)))/3600 as hours_since_prev
-       FROM users 
-       WHERE signup_fingerprint = $2
-     ),
-     ip_range_accounts AS (
-       SELECT id, email, phone, created_at
-       FROM users 
-       WHERE signup_ip::text LIKE $3
-     )
-     SELECT 
-       (SELECT COUNT(*) FROM ip_accounts) as ip_total,
-       (SELECT COUNT(*) FROM fp_accounts) as fp_total,
-       (SELECT COUNT(*) FROM ip_range_accounts) as ip_range_total,
-       (SELECT COUNT(*) FROM ip_accounts WHERE hours_since_prev <= $4) as ip_clustered,
-       (SELECT COUNT(*) FROM fp_accounts WHERE hours_since_prev <= $4) as fp_clustered,
-       (SELECT json_agg(row_to_json(ip_accounts)) FROM (SELECT * FROM ip_accounts LIMIT 10) ip_accounts) as ip_accounts_json,
-       (SELECT json_agg(row_to_json(fp_accounts)) FROM (SELECT * FROM fp_accounts LIMIT 10) fp_accounts) as fp_accounts_json`,
-    [ip, fingerprint, normalizedIP.replace('/24', '.%'), clusterHours]
+  // Get IP-based accounts
+  const ipAccountsResult = await pool.query(
+    `SELECT id, email, created_at, fraud_score 
+     FROM users 
+     WHERE signup_ip = $1::inet
+     ORDER BY created_at DESC
+     LIMIT 10`,
+    [ip]
   );
 
-  const stats = result.rows[0] || {};
+  // Get fingerprint-based accounts
+  const fpAccountsResult = await pool.query(
+    `SELECT id, email, created_at, fraud_score 
+     FROM users 
+     WHERE signup_fingerprint = $1
+     ORDER BY created_at DESC
+     LIMIT 10`,
+    [fingerprint]
+  );
+
+  // Get counts and clustering stats
+  const countResult = await pool.query(
+    `SELECT 
+       (SELECT COUNT(*) FROM users WHERE signup_ip = $1::inet) as ip_total,
+       (SELECT COUNT(*) FROM users WHERE signup_fingerprint = $2) as fp_total,
+       (SELECT COUNT(*) FROM users WHERE signup_ip::text LIKE $3) as ip_range_total,
+       (SELECT COUNT(*) FROM users WHERE signup_ip = $1::inet 
+        AND created_at > NOW() - INTERVAL '${clusterHours} hours') as ip_clustered,
+       (SELECT COUNT(*) FROM users WHERE signup_fingerprint = $2
+        AND created_at > NOW() - INTERVAL '${clusterHours} hours') as fp_clustered
+    `,
+    [ip, fingerprint, normalizedIP.replace('/24', '.%')]
+  );
+
+  const stats = countResult.rows[0] || {};
   const ipTotal = parseInt(stats.ip_total) || 0;
   const fpTotal = parseInt(stats.fp_total) || 0;
   const ipRangeTotal = parseInt(stats.ip_range_total) || 0;
@@ -376,8 +389,8 @@ const detectMultiAccounting = async (ip, fingerprint) => {
     clusteredAccounts: ipClustered + fpClustered,
     riskScore,
     accounts: {
-      byIP: stats.ip_accounts_json ? JSON.parse(stats.ip_accounts_json) : [],
-      byFingerprint: stats.fp_accounts_json ? JSON.parse(stats.fp_accounts_json) : [],
+      byIP: ipAccountsResult.rows,
+      byFingerprint: fpAccountsResult.rows,
     },
   };
 };
@@ -417,7 +430,7 @@ const calculateFraudScore = async (req, referralCode) => {
   // 3. VPN/Proxy detection
   const vpnResult = await isVPNorProxy(ip);
   evidence.vpn = vpnResult;
-  
+
   if (vpnResult.isVpn && FRAUD_CONFIG.BLOCK_VPN_SIGNUPS) {
     fraudScore += FRAUD_CONFIG.WEIGHT_VPN_SIGNUP;
     triggers.push('vpn_detected');
@@ -434,7 +447,7 @@ const calculateFraudScore = async (req, referralCode) => {
   // 4. Rate limiting
   const rateLimit = await checkSignupRateLimit(ip, fingerprint);
   evidence.rateLimit = rateLimit;
-  
+
   if (rateLimit.ipExceeded) {
     fraudScore += FRAUD_CONFIG.WEIGHT_RAPID_SIGNUP_IP;
     triggers.push('rapid_signup_ip');
@@ -499,12 +512,12 @@ const logFraudEvent = async (userId, triggerType, severity, details, ip, fingerp
 
 const sanitizeDetails = (details) => {
   if (!details) return {};
-  
+
   // Deep clone and remove sensitive fields
   const sanitized = JSON.parse(JSON.stringify(details));
-  
+
   const sensitiveFields = ['password', 'pin', 'pin_hash', 'password_hash', 'token', 'secret', 'api_key'];
-  
+
   const redact = (obj) => {
     if (!obj || typeof obj !== 'object') return;
     for (const key of Object.keys(obj)) {
@@ -515,7 +528,7 @@ const sanitizeDetails = (details) => {
       }
     }
   };
-  
+
   redact(sanitized);
   return sanitized;
 };
