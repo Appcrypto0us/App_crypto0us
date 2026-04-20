@@ -4,12 +4,82 @@ const { generateToken } = require('../utils/jwt');
 const { sendOTP, sendWelcome } = require('../services/emailService');
 const generateCode = require('../utils/generateCode');
 const referralService = require('../services/referralService');
+const antiFraudService = require('../services/antiFraudService');
 
+// ============================================================================
+// REGISTER
+// ============================================================================
 exports.register = async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const { email, phone, first_name, password, pin, referral_code } = req.body;
+    
+    // Get client IP and fingerprint from middleware
+    const ip = req.clientIP || antiFraudService.getClientIP(req);
+    const fingerprint = req.fingerprint || antiFraudService.generateFingerprint(req);
+
+    // ========================================================================
+    // ANTI-FRAUD CHECKS
+    // ========================================================================
+    
+    // Check if IP or fingerprint is blocked
+    const blockCheck = await antiFraudService.isBlocked(ip, fingerprint);
+    if (blockCheck.blocked) {
+      await client.query('ROLLBACK');
+      console.warn(`🚫 Blocked registration attempt from ${ip} (${blockCheck.reason})`);
+      return res.status(403).json({ 
+        message: 'Access denied. Please contact support.',
+        code: 'ACCESS_BLOCKED'
+      });
+    }
+    
+    // Calculate fraud score
+    const fraudCheck = await antiFraudService.calculateFraudScore(req, referral_code);
+    
+    // Block high-risk signups (fraud score >= 100)
+    if (fraudCheck.isFraudulent && fraudCheck.fraudScore >= 100) {
+      await client.query('ROLLBACK');
+      
+      // Log fraud attempt
+      await antiFraudService.logFraudEvent(
+        null, 'high_fraud_score', 'critical',
+        fraudCheck, ip, fingerprint
+      );
+      
+      console.warn(`🚫 High fraud score (${fraudCheck.fraudScore}) blocked for ${email}`);
+      return res.status(403).json({ 
+        message: 'Registration blocked due to suspicious activity.',
+        code: 'FRAUD_DETECTED'
+      });
+    }
+    
+    // Check self-referral
+    let validReferralCode = referral_code;
+    let referralEligible = true;
+    
+    if (referral_code) {
+      const selfReferral = await antiFraudService.detectSelfReferral(referral_code, ip, fingerprint);
+      
+      if (selfReferral.isSelfReferral) {
+        // Log self-referral attempt
+        await antiFraudService.logFraudEvent(
+          null, 'self_referral', 'high',
+          { referral_code, ...selfReferral }, ip, fingerprint
+        );
+        
+        console.warn(`🚫 Self-referral detected for ${email} using code ${referral_code}`);
+        
+        // Invalidate referral code for this registration
+        validReferralCode = null;
+        referralEligible = false;
+      }
+      
+      if (selfReferral.invalidCode) {
+        // Referral code doesn't exist - ignore it
+        validReferralCode = null;
+      }
+    }
 
     // Check existing user
     const existing = await client.query(
@@ -17,6 +87,7 @@ exports.register = async (req, res) => {
       [email, phone]
     );
     if (existing.rows.length > 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ message: 'User with that email or phone already exists' });
     }
 
@@ -27,26 +98,54 @@ exports.register = async (req, res) => {
     // Generate unique referral code
     const refCode = `CL${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-    // Find referrer if any
+    // Find referrer if valid referral code provided
     let referredBy = null;
-    if (referral_code) {
+    if (validReferralCode) {
       const refResult = await client.query(
-        'SELECT id FROM users WHERE referral_code = $1',
-        [referral_code]
+        `SELECT id, created_at FROM users 
+         WHERE referral_code = $1 AND is_active = true`,
+        [validReferralCode]
       );
+      
       if (refResult.rows.length > 0) {
-        referredBy = refResult.rows[0].id;
+        const referrer = refResult.rows[0];
+        
+        // Check referrer account age (must be at least 30 days old)
+        const accountAgeDays = (new Date() - new Date(referrer.created_at)) / (1000 * 60 * 60 * 24);
+        
+        if (accountAgeDays >= antiFraudService.FRAUD_CONFIG.REFERRAL_COOLDOWN_DAYS) {
+          referredBy = referrer.id;
+        } else {
+          referralEligible = false;
+          console.log(`⚠️ Referrer account too new (${accountAgeDays.toFixed(1)} days) for ${email}`);
+        }
       }
     }
 
     // Create user (inactive until OTP verified)
     const userResult = await client.query(
-      `INSERT INTO users (email, phone, first_name, password_hash, pin_hash, referral_code, referred_by, is_active, email_verified)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, FALSE)
+      `INSERT INTO users (email, phone, first_name, password_hash, pin_hash, 
+        referral_code, referred_by, is_active, email_verified, 
+        signup_ip, signup_fingerprint, fraud_score, referral_eligible)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, FALSE, $8::inet, $9, $10, $11)
        RETURNING id, email, phone, first_name, referral_code`,
-      [email, phone, first_name, passwordHash, pinHash, refCode, referredBy]
+      [email, phone, first_name, passwordHash, pinHash, refCode, referredBy, 
+       ip, fingerprint, fraudCheck.fraudScore, referralEligible]
     );
     const user = userResult.rows[0];
+
+    // Record device information
+    await antiFraudService.recordDevice(user.id, req, fingerprint, ip, fraudCheck.vpnDetected);
+
+    // Log fraud triggers if any (account created but flagged)
+    if (fraudCheck.triggers.length > 0) {
+      await antiFraudService.logFraudEvent(
+        user.id, 'fraud_triggers', 'medium',
+        { triggers: fraudCheck.triggers, fraudScore: fraudCheck.fraudScore }, 
+        ip, fingerprint
+      );
+      console.log(`⚠️ User ${email} flagged with triggers: ${fraudCheck.triggers.join(', ')}`);
+    }
 
     // Create wallet
     await client.query(
@@ -71,6 +170,9 @@ exports.register = async (req, res) => {
       message: 'Registration successful. Please check your email for verification code.',
       userId: user.id,
       email: user.email,
+      ...(fraudCheck.triggers.length > 0 && { 
+        warning: 'Additional verification may be required.' 
+      }),
     });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -81,18 +183,26 @@ exports.register = async (req, res) => {
   }
 };
 
+// ============================================================================
+// VERIFY OTP
+// ============================================================================
 exports.verifyOTP = async (req, res) => {
   const { email, otp } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
-    const userRes = await client.query('SELECT id, first_name FROM users WHERE email = $1', [email]);
+
+    const userRes = await client.query(
+      'SELECT id, first_name, referred_by, referral_eligible FROM users WHERE email = $1', 
+      [email]
+    );
     if (userRes.rows.length === 0) {
       return res.status(400).json({ message: 'User not found' });
     }
     const userId = userRes.rows[0].id;
     const firstName = userRes.rows[0].first_name;
+    const referredBy = userRes.rows[0].referred_by;
+    const referralEligible = userRes.rows[0].referral_eligible;
 
     const otpRes = await client.query(
       `SELECT id FROM otp_verifications
@@ -109,16 +219,19 @@ exports.verifyOTP = async (req, res) => {
       [userId]
     );
 
-    const userData = await client.query('SELECT referred_by FROM users WHERE id = $1', [userId]);
-    if (userData.rows[0].referred_by) {
-      await referralService.grantSignupBonus(client, userData.rows[0].referred_by, userId, firstName);
+    // Grant signup bonus ONLY if referral is eligible (not self-referral, account age ok)
+    if (referredBy && referralEligible) {
+      await referralService.grantSignupBonus(client, referredBy, userId, firstName);
+      console.log(`✅ Referral bonus granted: ${firstName} referred by user ${referredBy}`);
+    } else if (referredBy && !referralEligible) {
+      console.log(`⚠️ Referral bonus skipped (ineligible) for ${firstName}`);
     }
 
     await client.query('COMMIT');
-    
+
     // Send welcome email
     sendWelcome(email, firstName).catch(console.error);
-    
+
     res.json({ message: 'Email verified successfully. You can now login.' });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -129,23 +242,35 @@ exports.verifyOTP = async (req, res) => {
   }
 };
 
+// ============================================================================
+// LOGIN
+// ============================================================================
 exports.login = async (req, res) => {
   const { phone, pin } = req.body;
+  const ip = antiFraudService.getClientIP(req);
+  
   try {
     const result = await pool.query(
-      `SELECT id, email, phone, first_name, is_admin, is_active, email_verified, pin_hash, referral_code, kyc_status
+      `SELECT id, email, phone, first_name, is_admin, is_active, email_verified, 
+              pin_hash, referral_code, kyc_status, fraud_score, referral_eligible
        FROM users WHERE phone = $1`,
       [phone]
     );
     if (result.rows.length === 0) {
+      // Log failed login attempt
+      console.log(`⚠️ Failed login attempt for non-existent phone: ${phone} from ${ip}`);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     const user = result.rows[0];
+    
     if (!user.is_active || !user.email_verified) {
       return res.status(401).json({ message: 'Account not verified or suspended' });
     }
+    
     const pinMatch = await compare(pin, user.pin_hash);
     if (!pinMatch) {
+      // Log failed PIN attempt
+      console.log(`⚠️ Failed PIN attempt for ${phone} from ${ip}`);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
@@ -158,6 +283,9 @@ exports.login = async (req, res) => {
 
     const token = generateToken(user);
 
+    // Log successful login
+    console.log(`✅ Successful login: ${user.email} (fraud_score: ${user.fraud_score})`);
+
     res.json({
       token,
       user: {
@@ -168,6 +296,8 @@ exports.login = async (req, res) => {
         is_admin: user.is_admin,
         kyc_status: user.kyc_status,
         referral_code: user.referral_code,
+        fraud_score: user.fraud_score,
+        referral_eligible: user.referral_eligible,
         wallet,
       },
     });
@@ -177,10 +307,14 @@ exports.login = async (req, res) => {
   }
 };
 
+// ============================================================================
+// GET ME
+// ============================================================================
 exports.getMe = async (req, res) => {
   try {
     const userRes = await pool.query(
-      `SELECT id, email, phone, first_name, is_admin, is_active, email_verified, kyc_status, referral_code, created_at
+      `SELECT id, email, phone, first_name, is_admin, is_active, email_verified, 
+              kyc_status, referral_code, created_at, fraud_score, referral_eligible
        FROM users WHERE id = $1`,
       [req.user.id]
     );
@@ -198,14 +332,34 @@ exports.getMe = async (req, res) => {
   }
 };
 
+// ============================================================================
+// RESEND OTP
+// ============================================================================
 exports.resendOTP = async (req, res) => {
   const { email } = req.body;
+  const ip = antiFraudService.getClientIP(req);
+  
   try {
     const userRes = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (userRes.rows.length === 0) {
       return res.status(404).json({ message: 'User not found' });
     }
     const userId = userRes.rows[0].id;
+
+    // Rate limit OTP resend (max 5 per hour per IP)
+    const rateCheck = await pool.query(
+      `SELECT COUNT(*) as count FROM otp_verifications 
+       WHERE email = $1 AND created_at > NOW() - INTERVAL '1 hour'`,
+      [email]
+    );
+    
+    if (parseInt(rateCheck.rows[0].count) >= 5) {
+      console.warn(`🚫 OTP rate limit exceeded for ${email} from ${ip}`);
+      return res.status(429).json({ 
+        message: 'Too many OTP requests. Please try again later.',
+        code: 'RATE_LIMIT'
+      });
+    }
 
     const otp = generateCode(6);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -217,6 +371,7 @@ exports.resendOTP = async (req, res) => {
     await sendOTP(email, otp);
     res.json({ message: 'New OTP sent to your email' });
   } catch (error) {
+    console.error('Resend OTP error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
