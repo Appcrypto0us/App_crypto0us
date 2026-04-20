@@ -592,10 +592,7 @@ const recordDevice = async (userId, req, fingerprint, ip, vpnDetected) => {
     `INSERT INTO user_devices (user_id, fingerprint_hash, ip_address, user_agent, 
       platform, browser, is_vpn, is_proxy, is_datacenter, last_seen_at, created_at)
      VALUES ($1, $2, $3::inet, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-     ON CONFLICT (fingerprint_hash, user_id) DO UPDATE
-     SET last_seen_at = NOW(),
-         ip_address = EXCLUDED.ip_address,
-         user_agent = EXCLUDED.user_agent`,
+     ON CONFLICT DO NOTHING`,
     [
       userId, fingerprint, ip, userAgent, platform, browser, 
       vpnDetails.isVpn || false, vpnDetails.isProxy || false, vpnDetails.isDatacenter || false
