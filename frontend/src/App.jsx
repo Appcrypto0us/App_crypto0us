@@ -838,7 +838,8 @@ function ReferralsTab({ user, referrals, earnings, showToast }) {
     </div>
   );
 }
- ============================================================================
+
+//====================================================
 // HISTORY TAB
 // ============================================================================
 function HistoryTab({ transactions, pendingDeposits, pendingWithdrawals }) {
