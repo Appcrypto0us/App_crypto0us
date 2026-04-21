@@ -764,43 +764,139 @@ function PortfolioTab({ investments }) {
 }
 
 // ============================================================================
-// REFERRALS TAB
+// ============================================================================
+// REFERRALS TAB - STYLED TO MATCH SCREENSHOT
 // ============================================================================
 function ReferralsTab({ user, referrals, showToast }) {
   const [copied, setCopied] = useState(false);
-  const link = `${window.location.origin}?ref=${user?.referral_code}`;
+  
+  // Use the actual domain from the screenshot or window.location
+  const link = `https://cryptolegac.vercel.app?ref=${user?.referral_code}`;
+
   const handleCopy = async () => {
-    try { await navigator.clipboard.writeText(link); setCopied(true); showToast('Link copied!', 'success'); setTimeout(() => setCopied(false), 2000); } catch { showToast('Copy failed', 'error'); }
+    try { 
+      await navigator.clipboard.writeText(link); 
+      setCopied(true); 
+      showToast('Link copied!', 'success'); 
+      setTimeout(() => setCopied(false), 2000); 
+    } catch { 
+      showToast('Copy failed', 'error'); 
+    }
   };
+
   return (
-    <div>
-      <div className="ref-card" style={{ marginBottom: 20 }}>
-        <p style={{ fontSize: 12, opacity: 0.7 }}>Referral Code</p>
-        <p style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 800 }}>{user?.referral_code}</p>
-        <p style={{ fontSize: 12, opacity: 0.6 }}>{referrals.length} referrals</p>
+    <div style={{ padding: '0 16px' }}>
+      {/* Referral Code Card (Purple Gradient) */}
+      <div style={{ 
+        background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)', 
+        borderRadius: '24px', 
+        padding: '24px', 
+        color: 'white',
+        marginBottom: 20,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+      }}>
+        <p style={{ fontSize: 13, opacity: 0.9, marginBottom: 8 }}>Referral Code</p>
+        <p style={{ 
+          fontFamily: 'system-ui, sans-serif', 
+          fontSize: 32, 
+          fontWeight: 900, 
+          letterSpacing: '1px',
+          margin: '0 0 8px 0',
+          textTransform: 'uppercase'
+        }}>
+          {user?.referral_code || 'CL48E8DP'}
+        </p>
+        <p style={{ fontSize: 13, opacity: 0.8 }}>{referrals.length} referrals</p>
       </div>
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <code style={{ flex: 1, padding: 10, background: 'var(--surface2)', borderRadius: 8 }}>{link}</code>
-          <button onClick={handleCopy} className="btn btn-primary">{copied ? 'Copied!' : 'Copy'}</button>
-        </div>
+
+      {/* Referral Link Copy Section */}
+      <div className="card" style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        backgroundColor: '#fff', 
+        borderRadius: '16px', 
+        padding: '12px',
+        border: '1px solid #f0f0f0',
+        marginBottom: 24,
+        position: 'relative'
+      }}>
+        <code style={{ 
+          flex: 1, 
+          fontSize: 14, 
+          color: '#333', 
+          wordBreak: 'break-all',
+          paddingRight: '60px' 
+        }}>
+          {link}
+        </code>
+        <button 
+          onClick={handleCopy} 
+          style={{ 
+            backgroundColor: '#2563eb', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '8px', 
+            padding: '12px 20px',
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+            position: 'absolute',
+            right: '8px'
+          }}
+        >
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
       </div>
-      {referrals.length > 0 && (
-        <>
-          <p className="section-title">Your Referrals</p>
-          {referrals.map(r => (
-            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-              <div className="avatar">{initials(r.first_name)}</div>
-              <div style={{ flex: 1 }}><p>{r.first_name}</p><p style={{ fontSize: 11, color: 'var(--text3)' }}>Joined {fmtDateShort(r.created_at)}</p></div>
+
+      {/* Referrals List */}
+      <p style={{ 
+        fontSize: 14, 
+        fontWeight: 700, 
+        color: '#64748b', 
+        textTransform: 'uppercase', 
+        marginBottom: 16 
+      }}>
+        YOUR REFERRALS
+      </p>
+
+      {referrals.length > 0 ? (
+        referrals.map(r => (
+          <div key={r.id} style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 16, 
+            padding: '16px 0', 
+            borderBottom: '1px solid #f1f5f9' 
+          }}>
+            <div style={{ 
+              width: 44, 
+              height: 44, 
+              borderRadius: '50%', 
+              backgroundColor: '#4f46e5', 
+              color: 'white', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              fontWeight: 600,
+              fontSize: 16
+            }}>
+              {initials(r.first_name)}
             </div>
-          ))}
-        </>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontWeight: 600, color: '#1e293b', fontSize: 16 }}>{r.first_name}</p>
+              <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>
+                Joined {fmtDateShort(r.created_at)}
+              </p>
+            </div>
+          </div>
+        ))
+      ) : (
+        <p style={{ textAlign: 'center', color: '#94a3b8', marginTop: 20 }}>No referrals yet.</p>
       )}
     </div>
   );
 }
-
-// ============================================================================
+ ============================================================================
 // HISTORY TAB
 // ============================================================================
 function HistoryTab({ transactions, pendingDeposits, pendingWithdrawals }) {
