@@ -46,8 +46,8 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
       'http://localhost:3001', 
       'http://127.0.0.1:3000',
       'https://app-crypto0us.onrender.com',  // Render frontend URL
-      'https://cryptolegacy.vercel.app', 
-      'https://cryptolegacy-web.vercel.app',// Add any other frontend URLs
+      'https://cryptolegac.vercel.app', 
+  // Add any other frontend URLs
     ];
 
 app.use(cors({
