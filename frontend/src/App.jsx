@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useAuth } from './context/AuthContext';
 import API from './api';
-
+import InvestAIAssistant from './components/InvestAIAssistant';
 // ============================================================================
 // GLOBAL STYLES
 // ============================================================================
