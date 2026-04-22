@@ -14,34 +14,8 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
   const [sessionId, setSessionId] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState([]);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
-
-  // Keyboard detection using visualViewport API
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleViewportChange = () => {
-      if (window.visualViewport) {
-        const viewportHeight = window.visualViewport.height;
-        const windowHeight = window.innerHeight;
-        const isKeyboardOpen = viewportHeight < windowHeight * 0.75;
-        setIsKeyboardVisible(isKeyboardOpen);
-      }
-    };
-
-    window.visualViewport?.addEventListener('resize', handleViewportChange);
-    window.visualViewport?.addEventListener('scroll', handleViewportChange);
-    
-    // Initial check
-    handleViewportChange();
-
-    return () => {
-      window.visualViewport?.removeEventListener('resize', handleViewportChange);
-      window.visualViewport?.removeEventListener('scroll', handleViewportChange);
-    };
-  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -100,8 +74,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
   const handleQuickQuestion = (question) => {
     setInput(question);
-    // Auto-focus input when quick question is selected
-    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   const handleClearChat = () => {
@@ -125,10 +97,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
   return (
     <div className="ai-modal-overlay" onClick={onClose}>
-      <div 
-        className={`ai-modal ${isKeyboardVisible ? 'keyboard-active' : ''}`} 
-        onClick={e => e.stopPropagation()}
-      >
+      <div className="ai-modal" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="ai-modal-header">
           <div className="ai-modal-header-left">
@@ -137,7 +106,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
             </div>
             <div>
               <h3>AI Investment Assistant</h3>
-              <p>Powered by Gemini · Ask me about plans</p>
+              <p>Powered by Gemini · Ask me anything about plans</p>
             </div>
           </div>
           <div className="ai-modal-header-actions">
@@ -207,8 +176,8 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Questions - Hidden when keyboard is visible */}
-            {messages.length <= 1 && !isKeyboardVisible && (
+            {/* Quick Questions */}
+            {messages.length <= 1 && (
               <div className="ai-quick-questions">
                 <p>Suggested questions</p>
                 <div className="ai-quick-buttons">
@@ -271,8 +240,8 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
     border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
     width: 100%;
     max-width: 480px;
-    height: 85vh;
-    max-height: 85vh;
+    height: 50vh;
+    max-height: 50vh;
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-xl);
@@ -280,14 +249,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
     border-bottom: none;
     animation: slideUp 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
     overflow: hidden;
-    transition: height 0.2s ease, border-radius 0.2s ease;
-  }
-
-  /* Keyboard active styles */
-  .ai-modal.keyboard-active {
-    height: 95vh;
-    max-height: 95vh;
-    border-radius: 0 !important;
   }
 
   @media (min-width: 640px) {
@@ -297,12 +258,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
       max-height: 85vh;
       border-bottom: 1px solid var(--border);
       animation: scaleIn 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
-    }
-    
-    .ai-modal.keyboard-active {
-      height: 600px;
-      max-height: 85vh;
-      border-radius: var(--radius-xl, 28px) !important;
     }
   }
 
@@ -433,7 +388,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
   /* ── Messages area ── */
   .ai-modal-messages {
     flex: 1;
-    min-height: 0;
     overflow-y: auto;
     padding: 18px 20px;
     display: flex;
@@ -530,7 +484,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
     to   { transform: rotate(360deg); }
   }
 
-  /* ── Quick questions — Horizontal scroll chips ── */
+  /* ── Quick questions — matches .seg-control / chip feel ── */
   .ai-quick-questions {
     padding: 12px 20px 14px;
     border-top: 1px solid var(--border);
@@ -549,25 +503,8 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
   .ai-quick-buttons {
     display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    flex-wrap: wrap;
     gap: 6px;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-    padding-bottom: 4px;
-  }
-
-  .ai-quick-buttons::-webkit-scrollbar {
-    height: 3px;
-  }
-
-  .ai-quick-buttons::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .ai-quick-buttons::-webkit-scrollbar-thumb {
-    background: var(--border2, rgba(0,0,0,0.12));
-    border-radius: 3px;
   }
 
   .ai-quick-buttons button {
@@ -582,8 +519,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
     cursor: pointer;
     transition: all var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
     letter-spacing: 0.01em;
-    white-space: nowrap;
-    flex-shrink: 0;
   }
 
   .ai-quick-buttons button:hover {
@@ -669,7 +604,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
   /* ── History panel ── */
   .ai-modal-history {
     flex: 1;
-    min-height: 0;
     overflow-y: auto;
     padding: 20px;
     scrollbar-width: thin;
