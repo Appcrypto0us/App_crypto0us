@@ -224,6 +224,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
     justify-content: center;
     z-index: 2000;
     padding: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     animation: fadeIn 0.18s ease;
   }
 
@@ -231,6 +232,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
     .ai-modal-overlay {
       align-items: center;
       padding: 20px;
+      padding-bottom: 20px;
     }
   }
 
@@ -249,6 +251,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
     border-bottom: none;
     animation: slideUp 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
     overflow: hidden;
+    margin-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   @media (min-width: 640px) {
@@ -258,6 +261,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
       max-height: 85vh;
       border-bottom: 1px solid var(--border);
       animation: scaleIn 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
+      margin-bottom: 0;
     }
   }
 
