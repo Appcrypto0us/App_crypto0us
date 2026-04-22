@@ -109,7 +109,7 @@ exports.askAI = async (req, res) => {
 
     if (!chatSession) {
       const model = genAI.getGenerativeModel({ 
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         generationConfig: {
           temperature: 0.7,
           maxOutputTokens: 256,
@@ -234,7 +234,7 @@ exports.getPlanRecommendation = async (req, res) => {
 
   try {
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       generationConfig: {
         temperature: 0.7,
         maxOutputTokens: 200,
@@ -325,7 +325,7 @@ exports.explainPlan = async (req, res) => {
 
   try {
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       generationConfig: {
         temperature: 0.7,
         maxOutputTokens: 200,
