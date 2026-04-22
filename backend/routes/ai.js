@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
+const { protect } = require('../middleware/auth');  // ← CHANGE: import protect
 const admin = require('../middleware/admin');
 const { 
   askAI, 
@@ -11,7 +11,7 @@ const {
 } = require('../controllers/aiController');
 
 // All routes require authentication
-router.use(auth);
+router.use(protect);  // ← CHANGE: use protect instead of auth
 
 // User routes
 router.post('/chat', askAI);
