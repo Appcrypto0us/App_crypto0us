@@ -1617,6 +1617,8 @@ function InvestTab({ onInvest }) {
           );
         })}
       </div>
+   {/* ADD AI ASSISTANT HERE - Only appears on Invest tab */}
+      <InvestAIAssistant />
     </div>
   );
 }
