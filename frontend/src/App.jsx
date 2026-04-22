@@ -5,11 +5,12 @@ import {
   Search, Bell, ChevronRight, ChevronLeft, ChevronDown,
   CheckCircle2, XCircle, Clock, AlertTriangle, Eye,
   Camera, FileText, Send, Trash2, Edit3, UserX, UserCheck,
-  DollarSign, Activity, BarChart3, Wallet, Filter, RefreshCw,
+  DollarSign, Activity, BarChart3, Wallet, Filter, RefreshCw, MessageCircle,
   Menu, X, ArrowUpRight, ArrowDownRight, MoreVertical, Zap
 } from "lucide-react";
 import { useAuth } from './context/AuthContext';
 import API from './api';
+import AIChatModal from './components/AIChatModal';
 // ============================================================================
 // GLOBAL STYLES
 // ============================================================================
@@ -1616,6 +1617,12 @@ function InvestTab({ onInvest }) {
           );
         })}
       </div>
+{/* AI Chat Modal */}
+      <AIChatModal 
+        isOpen={showAIModal} 
+        onClose={() => setShowAIModal(false)}
+        onInvest={onInvest}
+      />
     </div>
   );
 }
