@@ -15,8 +15,10 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState([]);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [modalHeight, setModalHeight] = useState('auto');
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const modalRef = useRef(null);
 
   // Keyboard detection using visualViewport API
   useEffect(() => {
@@ -28,6 +30,13 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
         const windowHeight = window.innerHeight;
         const isKeyboardOpen = viewportHeight < windowHeight * 0.75;
         setIsKeyboardVisible(isKeyboardOpen);
+        
+        // Adjust modal height when keyboard is open
+        if (isKeyboardOpen) {
+          setModalHeight(`${viewportHeight - 60}px`); // Subtract header height
+        } else {
+          setModalHeight('auto');
+        }
       }
     };
 
@@ -45,7 +54,11 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 100);
+      setTimeout(() => {
+        inputRef.current?.focus();
+        // Scroll to bottom when keyboard opens
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 150);
     }
   }, [isOpen]);
 
@@ -100,7 +113,10 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
   const handleQuickQuestion = (question) => {
     setInput(question);
-    setTimeout(() => inputRef.current?.focus(), 100);
+    setTimeout(() => {
+      inputRef.current?.focus();
+      handleSend();
+    }, 100);
   };
 
   const handleClearChat = () => {
@@ -125,12 +141,16 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
   return (
     <div className="ai-modal-overlay" onClick={onClose}>
       <div 
-        className={`ai-modal-sheet ${isKeyboardVisible ? 'keyboard-active' : ''}`} 
+        ref={modalRef}
+        className={`ai-modal-sheet ${isKeyboardVisible ? 'keyboard-active' : ''}`}
+        style={modalHeight !== 'auto' ? { height: modalHeight } : {}}
         onClick={e => e.stopPropagation()}
       >
         <div className="ai-modal-handle" />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        
+        {/* Header */}
+        <div className="ai-modal-header">
+          <div className="ai-modal-header-left">
             <div className="ai-modal-avatar">
               <Bot size={18} color="var(--bg, #f5f4f0)" />
             </div>
@@ -139,7 +159,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
               <p className="ai-modal-subtitle">Powered by Gemini · Ask me anything</p>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 5 }}>
+          <div className="ai-modal-header-actions">
             <button 
               className="ai-icon-btn" 
               onClick={() => {
@@ -242,6 +262,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           </>
         )}
       </div>
+
       <style jsx>{`
         .ai-modal-overlay {
           position: fixed;
@@ -264,27 +285,29 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           }
         }
 
-        /* Modal sheet matching deposit/withdrawal modal */
+        /* Modal sheet */
         .ai-modal-sheet {
           background: var(--surface);
           width: 100%;
-          max-width: 440px;
+          max-width: 480px;
           border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
-          padding: 28px 24px 32px;
+          padding: 20px 24px 24px;
           animation: slideUp 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
-          max-height: 85vh;
-          overflow-y: auto;
           border: 1px solid var(--border);
           border-bottom: none;
           display: flex;
           flex-direction: column;
-          transition: max-height 0.2s ease, border-radius 0.2s ease;
+          transition: all 0.2s ease;
+          max-height: 85vh;
+          height: auto;
+          overflow: hidden;
         }
 
         /* Keyboard active styles */
         .ai-modal-sheet.keyboard-active {
           max-height: 50vh;
           border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
+          padding-bottom: 12px;
         }
 
         @media (min-width: 640px) {
@@ -292,11 +315,11 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
             border-radius: var(--radius-xl, 28px);
             animation: scaleIn 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
             border-bottom: 1px solid var(--border);
-            max-height: 90vh;
+            max-height: 85vh;
           }
           
           .ai-modal-sheet.keyboard-active {
-            max-height: 90vh;
+            max-height: 85vh;
             border-radius: var(--radius-xl, 28px);
           }
         }
@@ -306,32 +329,29 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           height: 3px;
           background: var(--border2);
           border-radius: 2px;
-          margin: 0 auto 24px;
+          margin: 0 auto 16px;
+          display: none;
         }
 
-        @media (min-width: 640px) {
+        @media (max-width: 639px) {
           .ai-modal-handle {
-            display: none;
+            display: block;
           }
         }
 
-        .ai-modal-title {
-          font-family: var(--font-display, 'Instrument Serif', Georgia, serif);
-          font-size: 18px;
-          font-weight: 400;
-          letter-spacing: -0.02em;
-          margin: 0;
-          color: var(--text);
+        /* Header */
+        .ai-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 16px;
+          flex-shrink: 0;
         }
 
-        .ai-modal-subtitle {
-          font-family: var(--font-mono, 'Geist Mono', monospace);
-          font-size: 10px;
-          font-weight: 500;
-          letter-spacing: 0.02em;
-          opacity: 0.45;
-          margin: 0;
-          color: var(--text);
+        .ai-modal-header-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
         }
 
         .ai-modal-avatar {
@@ -345,11 +365,35 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           flex-shrink: 0;
         }
 
+        .ai-modal-title {
+          font-family: var(--font-display, 'Instrument Serif', Georgia, serif);
+          font-size: 17px;
+          font-weight: 400;
+          letter-spacing: -0.02em;
+          margin: 0;
+          color: var(--text);
+        }
+
+        .ai-modal-subtitle {
+          font-family: var(--font-mono, 'Geist Mono', monospace);
+          font-size: 9px;
+          font-weight: 500;
+          letter-spacing: 0.02em;
+          opacity: 0.45;
+          margin: 2px 0 0;
+          color: var(--text);
+        }
+
+        .ai-modal-header-actions {
+          display: flex;
+          gap: 5px;
+        }
+
         .ai-icon-btn {
           width: 32px;
           height: 32px;
           border-radius: var(--radius-xs, 6px);
-          background: rgba(0, 0, 0, 0.05);
+          background: var(--surface2);
           border: 1px solid var(--border);
           color: var(--text2);
           cursor: pointer;
@@ -360,7 +404,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
         }
 
         .ai-icon-btn:hover {
-          background: var(--surface2);
+          background: var(--surface3);
           color: var(--text);
         }
 
@@ -373,17 +417,25 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           flex: 1;
           min-height: 0;
           overflow-y: auto;
-          padding: 0 0 18px 0;
+          padding: 0 0 16px 0;
           display: flex;
           flex-direction: column;
           gap: 12px;
           scrollbar-width: thin;
-          scrollbar-color: var(--border2, rgba(0,0,0,0.12)) transparent;
         }
 
-        .ai-modal-messages::-webkit-scrollbar { width: 3px; }
-        .ai-modal-messages::-webkit-scrollbar-track { background: transparent; }
-        .ai-modal-messages::-webkit-scrollbar-thumb { background: var(--border2, rgba(0,0,0,0.12)); border-radius: 3px; }
+        .ai-modal-messages::-webkit-scrollbar {
+          width: 3px;
+        }
+
+        .ai-modal-messages::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .ai-modal-messages::-webkit-scrollbar-thumb {
+          background: var(--border2);
+          border-radius: 3px;
+        }
 
         .ai-message {
           display: flex;
@@ -417,7 +469,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           padding: 10px 14px;
           border-radius: var(--radius, 14px);
           font-family: var(--font-body, 'Geist', system-ui, sans-serif);
-          font-size: 13.5px;
+          font-size: 13px;
           line-height: 1.5;
           letter-spacing: -0.01em;
         }
@@ -465,9 +517,9 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           to   { transform: rotate(360deg); }
         }
 
-        /* Quick questions - Horizontal scroll chips */
+        /* Quick questions - Horizontal scroll */
         .ai-quick-questions {
-          padding: 12px 0 14px;
+          padding: 12px 0 0;
           border-top: 1px solid var(--border);
           flex-shrink: 0;
         }
@@ -477,7 +529,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           font-size: 10px;
           font-weight: 700;
           color: var(--text3);
-          margin-bottom: 9px;
+          margin-bottom: 8px;
           text-transform: uppercase;
           letter-spacing: 0.08em;
         }
@@ -486,7 +538,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           display: flex;
           flex-wrap: nowrap;
           overflow-x: auto;
-          gap: 6px;
+          gap: 8px;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
           padding-bottom: 4px;
@@ -501,7 +553,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
         }
 
         .ai-quick-buttons::-webkit-scrollbar-thumb {
-          background: var(--border2, rgba(0,0,0,0.12));
+          background: var(--border2);
           border-radius: 3px;
         }
 
@@ -515,7 +567,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           font-weight: 500;
           color: var(--text2);
           cursor: pointer;
-          transition: all var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
+          transition: all var(--transition);
           letter-spacing: 0.01em;
           white-space: nowrap;
           flex-shrink: 0;
@@ -525,7 +577,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           background: var(--surface);
           border-color: var(--accent, #1a4aff);
           color: var(--accent, #1a4aff);
-          box-shadow: 0 0 0 2px var(--accent-soft, rgba(26,74,255,0.08));
+          box-shadow: 0 0 0 2px var(--accent-soft);
         }
 
         .ai-quick-buttons button:active {
@@ -537,9 +589,10 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           padding: 12px 0 0;
           border-top: 1px solid var(--border);
           display: flex;
-          gap: 9px;
+          gap: 10px;
           align-items: center;
           flex-shrink: 0;
+          margin-top: 4px;
         }
 
         .ai-modal-input input {
@@ -549,12 +602,10 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           border: 1.5px solid var(--border);
           border-radius: var(--radius-sm, 10px);
           font-family: var(--font-body, 'Geist', system-ui, sans-serif);
-          font-size: 13.5px;
+          font-size: 13px;
           color: var(--text);
           outline: none;
-          transition: border-color var(--transition, 200ms cubic-bezier(0.4,0,0.2,1)),
-                      box-shadow var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
-          letter-spacing: -0.01em;
+          transition: all var(--transition);
         }
 
         .ai-modal-input input::placeholder {
@@ -563,7 +614,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
         .ai-modal-input input:focus {
           border-color: var(--accent, #1a4aff);
-          box-shadow: 0 0 0 3px var(--accent-soft, rgba(26,74,255,0.08));
+          box-shadow: 0 0 0 3px var(--accent-soft);
         }
 
         .ai-modal-input input:disabled {
@@ -572,8 +623,8 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
         }
 
         .ai-send-btn {
-          width: 40px;
-          height: 40px;
+          width: 42px;
+          height: 42px;
           border-radius: 50%;
           background: var(--text);
           border: none;
@@ -582,7 +633,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
+          transition: all var(--transition);
           flex-shrink: 0;
         }
 
@@ -606,12 +657,20 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           min-height: 0;
           overflow-y: auto;
           scrollbar-width: thin;
-          scrollbar-color: var(--border2, rgba(0,0,0,0.12)) transparent;
         }
 
-        .ai-modal-history::-webkit-scrollbar { width: 3px; }
-        .ai-modal-history::-webkit-scrollbar-track { background: transparent; }
-        .ai-modal-history::-webkit-scrollbar-thumb { background: var(--border2, rgba(0,0,0,0.12)); border-radius: 3px; }
+        .ai-modal-history::-webkit-scrollbar {
+          width: 3px;
+        }
+
+        .ai-modal-history::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .ai-modal-history::-webkit-scrollbar-thumb {
+          background: var(--border2);
+          border-radius: 3px;
+        }
 
         .ai-history-heading {
           font-family: var(--font-mono, 'Geist Mono', monospace);
@@ -620,42 +679,36 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           color: var(--text3);
           text-transform: uppercase;
           letter-spacing: 0.08em;
-          margin-bottom: 14px;
+          margin-bottom: 12px;
         }
 
         .ai-history-item {
           background: var(--surface2);
           border: 1px solid var(--border);
           border-radius: var(--radius, 14px);
-          padding: 14px;
+          padding: 12px;
           margin-bottom: 10px;
-          transition: box-shadow var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
-        }
-
-        .ai-history-item:hover {
-          box-shadow: var(--shadow-sm);
         }
 
         .ai-history-question {
           font-family: var(--font-body, 'Geist', system-ui, sans-serif);
-          font-size: 13px;
+          font-size: 12px;
           color: var(--text);
           margin-bottom: 5px;
-          letter-spacing: -0.01em;
           line-height: 1.45;
         }
 
         .ai-history-answer {
           font-family: var(--font-body, 'Geist', system-ui, sans-serif);
-          font-size: 12.5px;
+          font-size: 11.5px;
           color: var(--text2);
-          margin-bottom: 8px;
+          margin-bottom: 6px;
           line-height: 1.45;
         }
 
         .ai-history-time {
           font-family: var(--font-mono, 'Geist Mono', monospace);
-          font-size: 10px;
+          font-size: 9px;
           color: var(--text3);
           letter-spacing: 0.02em;
         }
@@ -663,14 +716,13 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
         .ai-empty-history {
           text-align: center;
           color: var(--text3);
-          padding: 48px 20px;
-          font-family: var(--font-body, 'Geist', system-ui, sans-serif);
+          padding: 40px 20px;
           font-size: 13px;
         }
 
         .ai-back-btn {
           width: 100%;
-          padding: 11px 16px;
+          padding: 10px 16px;
           background: var(--surface2);
           border: 1px solid var(--border);
           border-radius: var(--radius-sm, 10px);
@@ -680,29 +732,28 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           color: var(--text2);
           cursor: pointer;
           margin-top: 10px;
-          transition: all var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
-          letter-spacing: -0.01em;
+          transition: all var(--transition);
         }
 
         .ai-back-btn:hover {
           background: var(--surface);
           color: var(--text);
-          border-color: var(--border2, rgba(0,0,0,0.12));
+          border-color: var(--border2);
         }
 
         @keyframes fadeIn {
           from { opacity: 0; }
-          to   { opacity: 1; }
+          to { opacity: 1; }
         }
 
         @keyframes slideUp {
           from { opacity: 0; transform: translateY(60px); }
-          to   { opacity: 1; transform: translateY(0); }
+          to { opacity: 1; transform: translateY(0); }
         }
 
         @keyframes scaleIn {
           from { opacity: 0; transform: scale(0.92); }
-          to   { opacity: 1; transform: scale(1); }
+          to { opacity: 1; transform: scale(1); }
         }
       `}</style>
     </div>
