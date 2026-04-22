@@ -1,0 +1,2 @@
+# .vercelignore - Add this file to your project root
+frontend/src/services/geminiService.js
