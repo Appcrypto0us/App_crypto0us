@@ -14,62 +14,30 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
   const [sessionId, setSessionId] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState([]);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Detect keyboard on mobile
+  // Keyboard detection
   useEffect(() => {
     if (!isOpen) return;
 
-    const handleFocus = () => {
-      // On input focus, wait for keyboard to appear
-      setTimeout(() => {
-        const activeEl = document.activeElement;
-        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
-          // Get keyboard height (rough estimate)
-          const viewportHeight = window.visualViewport?.height || window.innerHeight;
-          const windowHeight = window.innerHeight;
-          const estimatedHeight = windowHeight - viewportHeight;
-          if (estimatedHeight > 100) {
-            setKeyboardHeight(estimatedHeight);
-          }
-        }
-      }, 100);
-    };
-
-    const handleBlur = () => {
-      setKeyboardHeight(0);
-    };
-
-    const inputElement = inputRef.current;
-    if (inputElement) {
-      inputElement.addEventListener('focus', handleFocus);
-      inputElement.addEventListener('blur', handleBlur);
-    }
-
-    // Also listen for visualViewport resize (more accurate)
-    const handleViewportResize = () => {
+    const handleViewportChange = () => {
       if (window.visualViewport) {
         const viewportHeight = window.visualViewport.height;
         const windowHeight = window.innerHeight;
-        const diff = windowHeight - viewportHeight;
-        if (diff > 100) {
-          setKeyboardHeight(diff);
-        } else {
-          setKeyboardHeight(0);
-        }
+        const isKeyboardOpen = viewportHeight < windowHeight * 0.75;
+        setIsKeyboardVisible(isKeyboardOpen);
       }
     };
 
-    window.visualViewport?.addEventListener('resize', handleViewportResize);
+    window.visualViewport?.addEventListener('resize', handleViewportChange);
+    window.visualViewport?.addEventListener('scroll', handleViewportChange);
+    handleViewportChange();
 
     return () => {
-      if (inputElement) {
-        inputElement.removeEventListener('focus', handleFocus);
-        inputElement.removeEventListener('blur', handleBlur);
-      }
-      window.visualViewport?.removeEventListener('resize', handleViewportResize);
+      window.visualViewport?.removeEventListener('resize', handleViewportChange);
+      window.visualViewport?.removeEventListener('scroll', handleViewportChange);
     };
   }, [isOpen]);
 
@@ -138,12 +106,9 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
   if (!isOpen) return null;
 
-  // Dynamic bottom padding to lift modal above keyboard
-  const modalStyle = keyboardHeight > 0 ? { transform: `translateY(-${keyboardHeight}px)` } : {};
-
   return (
     <div className="ai-modal-overlay" onClick={onClose}>
-      <div className="ai-modal-sheet" style={modalStyle} onClick={e => e.stopPropagation()}>
+      <div className={`ai-modal-sheet ${isKeyboardVisible ? 'keyboard-active' : ''}`} onClick={e => e.stopPropagation()}>
         <div className="ai-modal-handle" />
         
         <div className="ai-modal-header">
@@ -207,8 +172,8 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick questions - hide when keyboard is open */}
-            {messages.length <= 1 && keyboardHeight === 0 && (
+            {/* Quick questions - hide when keyboard visible */}
+            {messages.length <= 1 && !isKeyboardVisible && (
               <div className="ai-quick-questions">
                 <p>SUGGESTED QUESTIONS</p>
                 <div className="ai-quick-buttons">
@@ -245,58 +210,40 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
           display: flex;
-          align-items: flex-end;
+          align-items: center;
           justify-content: center;
           z-index: 2000;
-          padding: 0;
+          padding: 20px;
           animation: fadeIn 0.18s ease;
         }
 
-        @media (min-width: 640px) {
-          .ai-modal-overlay {
-            align-items: center;
-            padding: 20px;
-          }
-        }
-
+        /* Modal sheet - centered with 30% top/bottom spacing */
         .ai-modal-sheet {
           background: var(--surface);
           width: 100%;
           max-width: 480px;
-          border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
+          border-radius: var(--radius-xl, 28px);
           padding: 20px 24px 24px;
-          animation: slideUp 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
+          animation: scaleIn 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
           border: 1px solid var(--border);
-          border-bottom: none;
           display: flex;
           flex-direction: column;
-          transition: transform 0.2s ease;
-          max-height: 85vh;
+          transition: all 0.2s ease;
+          max-height: 70vh;
+          height: auto;
           overflow: hidden;
+          margin: auto;
+          box-shadow: var(--shadow-xl);
         }
 
-        @media (min-width: 640px) {
-          .ai-modal-sheet {
-            border-radius: var(--radius-xl, 28px);
-            animation: scaleIn 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
-            border-bottom: 1px solid var(--border);
-            max-height: 85vh;
-          }
+        /* When keyboard is open, reduce max-height */
+        .ai-modal-sheet.keyboard-active {
+          max-height: 50vh;
         }
 
+        /* Hide handle on desktop, show on mobile if needed (but not necessary for centered) */
         .ai-modal-handle {
-          width: 36px;
-          height: 3px;
-          background: var(--border2);
-          border-radius: 2px;
-          margin: 0 auto 16px;
           display: none;
-        }
-
-        @media (max-width: 639px) {
-          .ai-modal-handle {
-            display: block;
-          }
         }
 
         .ai-modal-header {
@@ -630,11 +577,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
-        }
-
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(60px); }
-          to { opacity: 1; transform: translateY(0); }
         }
 
         @keyframes scaleIn {
