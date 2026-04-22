@@ -15,15 +15,15 @@ const PORT = process.env.PORT || 5000;
 app.use((req, res, next) => {
   const start = Date.now();
   const { method, url, ip } = req;
-  
+
   res.on('finish', () => {
     const duration = Date.now() - start;
     const { statusCode } = res;
-    
+
     let statusColor = '\x1b[32m'; // Green
     if (statusCode >= 400) statusColor = '\x1b[33m'; // Yellow
     if (statusCode >= 500) statusColor = '\x1b[31m'; // Red
-    
+
     console.log(
       `\x1b[36m[${new Date().toISOString()}]\x1b[0m`,
       `${method} ${url}`,
@@ -32,7 +32,7 @@ app.use((req, res, next) => {
       `- ${ip}`
     );
   });
-  
+
   next();
 });
 
@@ -54,7 +54,7 @@ app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
       callback(null, true);
     } else {
@@ -125,6 +125,10 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/kyc', require('./routes/kyc'));
 app.use('/api/settings', require('./routes/settings'));
 
+// AI Assistant Routes
+const aiRoutes = require('./routes/ai');
+app.use('/api/ai', aiRoutes);
+
 // ============================================================================
 // HEALTH CHECK ENDPOINTS
 // ============================================================================
@@ -141,7 +145,7 @@ app.get('/api/health/detailed', async (req, res) => {
   try {
     const { pool } = require('./config/db');
     const dbResult = await pool.query('SELECT NOW()');
-    
+
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -185,6 +189,7 @@ app.get('/', (req, res) => {
       admin: '/api/admin',
       kyc: '/api/kyc',
       settings: '/api/settings',
+      ai: '/api/ai',
       health: '/api/health'
     }
   });
@@ -207,20 +212,20 @@ app.use((req, res) => {
 // ============================================================================
 app.use((err, req, res, next) => {
   console.error('❌ Global Error Handler:', err);
-  
+
   // Handle specific error types
   if (err.name === 'UnauthorizedError') {
     return res.status(401).json({ message: 'Invalid or expired token' });
   }
-  
+
   if (err.name === 'ValidationError') {
     return res.status(400).json({ message: err.message });
   }
-  
+
   if (err.code === 'LIMIT_FILE_SIZE') {
     return res.status(400).json({ message: 'File too large' });
   }
-  
+
   // Default error response
   res.status(err.status || 500).json({
     message: err.message || 'Internal server error',
@@ -235,11 +240,11 @@ let server;
 
 const gracefulShutdown = async (signal) => {
   console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
-  
+
   if (server) {
     server.close(async () => {
       console.log('✅ HTTP server closed');
-      
+
       // Close database pool using closePool function
       try {
         await closePool();
@@ -247,7 +252,7 @@ const gracefulShutdown = async (signal) => {
       } catch (err) {
         console.error('❌ Error closing database pool:', err);
       }
-      
+
       // Stop cron jobs
       try {
         investmentCron.stop();
@@ -255,11 +260,11 @@ const gracefulShutdown = async (signal) => {
       } catch (err) {
         console.error('❌ Error stopping cron jobs:', err);
       }
-      
+
       console.log('👋 Graceful shutdown complete');
       process.exit(0);
     });
-    
+
     // Force exit after 10 seconds
     setTimeout(() => {
       console.error('❌ Could not close connections in time, forcefully shutting down');
@@ -305,8 +310,9 @@ testConnection().then(() => {
     console.log(`📋 API Documentation: https://app-crypto0us.onrender.com/`);
     console.log(`💚 Health Check: https://app-crypto0us.onrender.com/api/health`);
     console.log(`📊 Detailed Health: https://app-crypto0us.onrender.com/api/health/detailed`);
+    console.log(`🤖 AI Assistant: https://app-crypto0us.onrender.com/api/ai`);
     console.log('═══════════════════════════════════════════════════════════');
-    
+
     // Start cron jobs
     try {
       investmentCron.start();
