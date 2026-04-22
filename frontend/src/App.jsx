@@ -1587,13 +1587,48 @@ function HomeTab({ wallet, pendingDeposits, pendingWithdrawals, onDeposit, onWit
 // ============================================================================
 // INVEST TAB
 // ============================================================================
+// ============================================================================
+// INVEST TAB
+// ============================================================================
 function InvestTab({ onInvest }) {
+  const [showAIModal, setShowAIModal] = useState(false);  // ← Add this state
+
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: '-0.03em', marginBottom: 6 }}>Investment Plans</h2>
-        <p style={{ fontSize: 13, color: 'var(--text3)' }}>Choose a plan that matches your goals</p>
+      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: '-0.03em', marginBottom: 6 }}>Investment Plans</h2>
+          <p style={{ fontSize: 13, color: 'var(--text3)' }}>Choose a plan that matches your goals</p>
+        </div>
+        
+        {/* AI Chat Trigger Button */}
+        <button
+          onClick={() => setShowAIModal(true)}
+          style={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            border: 'none',
+            borderRadius: 40,
+            padding: '10px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            cursor: 'pointer',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.05)';
+            e.currentTarget.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <span style={{ fontSize: 20 }}>🤖</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'white' }}>AI Assistant</span>
+        </button>
       </div>
+      
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {Object.values(INVESTMENT_PLANS).map(plan => {
           const d = plan.details;
@@ -1617,7 +1652,8 @@ function InvestTab({ onInvest }) {
           );
         })}
       </div>
-{/* AI Chat Modal */}
+      
+      {/* AI Chat Modal */}
       <AIChatModal 
         isOpen={showAIModal} 
         onClose={() => setShowAIModal(false)}
