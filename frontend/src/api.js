@@ -40,4 +40,17 @@ API.interceptors.response.use(
   }
 );
 
+// Add these methods to your existing API object
+
+// AI Chat endpoints
+export const aiAPI = {
+  // Send message to AI assistant
+  chat: (message) => API.post('/ai/chat', { message }),
+  
+  // Get investment recommendation
+  recommend: (amount, goal) => API.post('/ai/recommend', { amount, goal }),
+  
+  // Explain plan details
+  explainPlan: (planId) => API.post(`/ai/explain/${planId}`),
+};
 export default API;
