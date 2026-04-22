@@ -14,8 +14,34 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
   const [sessionId, setSessionId] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState([]);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Keyboard detection using visualViewport API
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleViewportChange = () => {
+      if (window.visualViewport) {
+        const viewportHeight = window.visualViewport.height;
+        const windowHeight = window.innerHeight;
+        const isKeyboardOpen = viewportHeight < windowHeight * 0.75;
+        setIsKeyboardVisible(isKeyboardOpen);
+      }
+    };
+
+    window.visualViewport?.addEventListener('resize', handleViewportChange);
+    window.visualViewport?.addEventListener('scroll', handleViewportChange);
+    
+    // Initial check
+    handleViewportChange();
+
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handleViewportChange);
+      window.visualViewport?.removeEventListener('scroll', handleViewportChange);
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -74,6 +100,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
   const handleQuickQuestion = (question) => {
     setInput(question);
+    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   const handleClearChat = () => {
@@ -97,19 +124,22 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
   return (
     <div className="ai-modal-overlay" onClick={onClose}>
-      <div className="ai-modal" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="ai-modal-header">
-          <div className="ai-modal-header-left">
+      <div 
+        className={`ai-modal-sheet ${isKeyboardVisible ? 'keyboard-active' : ''}`} 
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="ai-modal-handle" />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div className="ai-modal-avatar">
               <Bot size={18} color="var(--bg, #f5f4f0)" />
             </div>
             <div>
-              <h3>AI Investment Assistant</h3>
-              <p>Powered by Gemini · Ask me anything about plans</p>
+              <h3 className="ai-modal-title">AI Investment Assistant</h3>
+              <p className="ai-modal-subtitle">Powered by Gemini · Ask me anything</p>
             </div>
           </div>
-          <div className="ai-modal-header-actions">
+          <div style={{ display: 'flex', gap: 5 }}>
             <button 
               className="ai-icon-btn" 
               onClick={() => {
@@ -176,8 +206,8 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Questions */}
-            {messages.length <= 1 && (
+            {/* Quick Questions - Hidden when keyboard is visible */}
+            {messages.length <= 1 && !isKeyboardVisible && (
               <div className="ai-quick-questions">
                 <p>Suggested questions</p>
                 <div className="ai-quick-buttons">
@@ -212,492 +242,469 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           </>
         )}
       </div>
-<style jsx>{`
-  .ai-modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    z-index: 2000;
-    padding: 0;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    animation: fadeIn 0.18s ease;
-  }
+      <style jsx>{`
+        .ai-modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.35);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          z-index: 2000;
+          padding: 0;
+          animation: fadeIn 0.18s ease;
+        }
 
-  @media (min-width: 640px) {
-    .ai-modal-overlay {
-      align-items: center;
-      padding: 20px;
-      padding-bottom: 20px;
-    }
-  }
+        @media (min-width: 640px) {
+          .ai-modal-overlay {
+            align-items: center;
+            padding: 20px;
+          }
+        }
 
-  /* ── Modal shell — matches .modal-sheet from App.js ── */
-  .ai-modal {
-    background: var(--surface);
-    border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
-    width: 100%;
-    max-width: 480px;
-    height: 50vh;
-    max-height: 50vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: var(--shadow-xl);
-    border: 1px solid var(--border);
-    border-bottom: none;
-    animation: slideUp 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
-    overflow: hidden;
-    margin-bottom: env(safe-area-inset-bottom, 0px);
-  }
+        /* Modal sheet matching deposit/withdrawal modal */
+        .ai-modal-sheet {
+          background: var(--surface);
+          width: 100%;
+          max-width: 440px;
+          border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
+          padding: 28px 24px 32px;
+          animation: slideUp 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
+          max-height: 85vh;
+          overflow-y: auto;
+          border: 1px solid var(--border);
+          border-bottom: none;
+          display: flex;
+          flex-direction: column;
+          transition: max-height 0.2s ease, border-radius 0.2s ease;
+        }
 
-  @media (min-width: 640px) {
-    .ai-modal {
-      border-radius: var(--radius-xl, 28px);
-      height: 600px;
-      max-height: 85vh;
-      border-bottom: 1px solid var(--border);
-      animation: scaleIn 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
-      margin-bottom: 0;
-    }
-  }
+        /* Keyboard active styles */
+        .ai-modal-sheet.keyboard-active {
+          max-height: 50vh;
+          border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
+        }
 
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-  }
+        @media (min-width: 640px) {
+          .ai-modal-sheet {
+            border-radius: var(--radius-xl, 28px);
+            animation: scaleIn 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
+            border-bottom: 1px solid var(--border);
+            max-height: 90vh;
+          }
+          
+          .ai-modal-sheet.keyboard-active {
+            max-height: 90vh;
+            border-radius: var(--radius-xl, 28px);
+          }
+        }
 
-  @keyframes slideUp {
-    from { opacity: 0; transform: translateY(60px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
+        .ai-modal-handle {
+          width: 36px;
+          height: 3px;
+          background: var(--border2);
+          border-radius: 2px;
+          margin: 0 auto 24px;
+        }
 
-  @keyframes scaleIn {
-    from { opacity: 0; transform: scale(0.92); }
-    to   { opacity: 1; transform: scale(1); }
-  }
+        @media (min-width: 640px) {
+          .ai-modal-handle {
+            display: none;
+          }
+        }
 
-  /* ── Header — dark/inverted like .wallet-card ── */
-  .ai-modal-header {
-    padding: 18px 20px 16px;
-    background: var(--text);
-    color: var(--bg);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
-    position: relative;
-    overflow: hidden;
-  }
+        .ai-modal-title {
+          font-family: var(--font-display, 'Instrument Serif', Georgia, serif);
+          font-size: 18px;
+          font-weight: 400;
+          letter-spacing: -0.02em;
+          margin: 0;
+          color: var(--text);
+        }
 
-  /* Subtle orb decorations matching wallet-card pseudo-elements */
-  .ai-modal-header::before {
-    content: '';
-    position: absolute;
-    top: -50px;
-    right: -50px;
-    width: 160px;
-    height: 160px;
-    background: rgba(255, 255, 255, 0.04);
-    border-radius: 50%;
-    pointer-events: none;
-  }
+        .ai-modal-subtitle {
+          font-family: var(--font-mono, 'Geist Mono', monospace);
+          font-size: 10px;
+          font-weight: 500;
+          letter-spacing: 0.02em;
+          opacity: 0.45;
+          margin: 0;
+          color: var(--text);
+        }
 
-  .ai-modal-header::after {
-    content: '';
-    position: absolute;
-    bottom: -60px;
-    left: -30px;
-    width: 140px;
-    height: 140px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 50%;
-    pointer-events: none;
-  }
+        .ai-modal-avatar {
+          width: 40px;
+          height: 40px;
+          background: var(--text);
+          border-radius: 11px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
 
-  .ai-modal-header-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    position: relative;
-    z-index: 1;
-  }
+        .ai-icon-btn {
+          width: 32px;
+          height: 32px;
+          border-radius: var(--radius-xs, 6px);
+          background: rgba(0, 0, 0, 0.05);
+          border: 1px solid var(--border);
+          color: var(--text2);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
+        }
 
-  .ai-modal-avatar {
-    width: 40px;
-    height: 40px;
-    background: rgba(255, 255, 255, 0.12);
-    border-radius: 11px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
+        .ai-icon-btn:hover {
+          background: var(--surface2);
+          color: var(--text);
+        }
 
-  /* Title — Instrument Serif matching .header-name */
-  .ai-modal-header h3 {
-    font-family: var(--font-display, 'Instrument Serif', Georgia, serif);
-    font-size: 18px;
-    font-weight: 400;
-    letter-spacing: -0.02em;
-    margin: 0 0 2px;
-    color: var(--bg);
-    opacity: 0.95;
-  }
+        .ai-icon-btn:active {
+          transform: scale(0.95);
+        }
 
-  /* Sub — Geist Mono matching caption style */
-  .ai-modal-header p {
-    font-family: var(--font-mono, 'Geist Mono', monospace);
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    opacity: 0.45;
-    margin: 0;
-    color: var(--bg);
-  }
+        /* Messages area */
+        .ai-modal-messages {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+          padding: 0 0 18px 0;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          scrollbar-width: thin;
+          scrollbar-color: var(--border2, rgba(0,0,0,0.12)) transparent;
+        }
 
-  .ai-modal-header-actions {
-    display: flex;
-    gap: 5px;
-    position: relative;
-    z-index: 1;
-  }
+        .ai-modal-messages::-webkit-scrollbar { width: 3px; }
+        .ai-modal-messages::-webkit-scrollbar-track { background: transparent; }
+        .ai-modal-messages::-webkit-scrollbar-thumb { background: var(--border2, rgba(0,0,0,0.12)); border-radius: 3px; }
 
-  /* Icon buttons in header — ghost on dark bg */
-  .ai-icon-btn {
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius-xs, 6px);
-    background: rgba(255, 255, 255, 0.10);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: var(--bg);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
-  }
+        .ai-message {
+          display: flex;
+          gap: 8px;
+          max-width: 86%;
+        }
 
-  .ai-icon-btn:hover {
-    background: rgba(255, 255, 255, 0.18);
-  }
+        .ai-message.user {
+          align-self: flex-end;
+          flex-direction: row-reverse;
+        }
 
-  .ai-icon-btn:active {
-    transform: scale(0.95);
-  }
+        .ai-message.assistant {
+          align-self: flex-start;
+        }
 
-  /* ── Messages area ── */
-  .ai-modal-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 18px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border2, rgba(0,0,0,0.12)) transparent;
-  }
+        .ai-message-avatar {
+          width: 26px;
+          height: 26px;
+          border-radius: 7px;
+          background: var(--accent-soft, rgba(26,74,255,0.08));
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--accent, #1a4aff);
+          flex-shrink: 0;
+          margin-top: 2px;
+        }
 
-  .ai-modal-messages::-webkit-scrollbar { width: 3px; }
-  .ai-modal-messages::-webkit-scrollbar-track { background: transparent; }
-  .ai-modal-messages::-webkit-scrollbar-thumb { background: var(--border2, rgba(0,0,0,0.12)); border-radius: 3px; }
+        .ai-message-bubble {
+          padding: 10px 14px;
+          border-radius: var(--radius, 14px);
+          font-family: var(--font-body, 'Geist', system-ui, sans-serif);
+          font-size: 13.5px;
+          line-height: 1.5;
+          letter-spacing: -0.01em;
+        }
 
-  .ai-message {
-    display: flex;
-    gap: 8px;
-    max-width: 86%;
-  }
+        .ai-message.user .ai-message-bubble {
+          background: var(--text);
+          color: var(--bg);
+          border-bottom-right-radius: 4px;
+        }
 
-  .ai-message.user {
-    align-self: flex-end;
-    flex-direction: row-reverse;
-  }
+        .ai-message.assistant .ai-message-bubble {
+          background: var(--surface2, #f9f8f5);
+          color: var(--text);
+          border: 1px solid var(--border);
+          border-bottom-left-radius: 4px;
+        }
 
-  .ai-message.assistant {
-    align-self: flex-start;
-  }
+        .ai-typing {
+          display: flex;
+          gap: 3px;
+          align-items: center;
+          padding: 12px 14px;
+        }
 
-  /* Small bot avatar — matches .action-icon feel */
-  .ai-message-avatar {
-    width: 26px;
-    height: 26px;
-    border-radius: 7px;
-    background: var(--accent-soft, rgba(26,74,255,0.08));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--accent, #1a4aff);
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
+        .ai-typing span {
+          font-size: 10px;
+          animation: bounce 1.4s infinite ease-in-out both;
+          color: var(--text3);
+        }
 
-  /* Bubbles — mirror .inv-card and .card surface treatment */
-  .ai-message-bubble {
-    padding: 10px 14px;
-    border-radius: var(--radius, 14px);
-    font-family: var(--font-body, 'Geist', system-ui, sans-serif);
-    font-size: 13.5px;
-    line-height: 1.5;
-    letter-spacing: -0.01em;
-  }
+        .ai-typing span:nth-child(1) { animation-delay: -0.32s; }
+        .ai-typing span:nth-child(2) { animation-delay: -0.16s; }
 
-  .ai-message.user .ai-message-bubble {
-    background: var(--text);
-    color: var(--bg);
-    border-bottom-right-radius: 4px;
-  }
+        @keyframes bounce {
+          0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+          40%           { transform: scale(1.2); opacity: 1; }
+        }
 
-  .ai-message.assistant .ai-message-bubble {
-    background: var(--surface2, #f9f8f5);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-bottom-left-radius: 4px;
-  }
+        .ai-spinner {
+          animation: spin 1s linear infinite;
+        }
 
-  /* Typing indicator */
-  .ai-typing {
-    display: flex;
-    gap: 3px;
-    align-items: center;
-    padding: 12px 14px;
-  }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
 
-  .ai-typing span {
-    font-size: 10px;
-    animation: bounce 1.4s infinite ease-in-out both;
-    color: var(--text3);
-  }
+        /* Quick questions - Horizontal scroll chips */
+        .ai-quick-questions {
+          padding: 12px 0 14px;
+          border-top: 1px solid var(--border);
+          flex-shrink: 0;
+        }
 
-  .ai-typing span:nth-child(1) { animation-delay: -0.32s; }
-  .ai-typing span:nth-child(2) { animation-delay: -0.16s; }
+        .ai-quick-questions p {
+          font-family: var(--font-mono, 'Geist Mono', monospace);
+          font-size: 10px;
+          font-weight: 700;
+          color: var(--text3);
+          margin-bottom: 9px;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+        }
 
-  @keyframes bounce {
-    0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
-    40%           { transform: scale(1.2); opacity: 1; }
-  }
+        .ai-quick-buttons {
+          display: flex;
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          gap: 6px;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+          padding-bottom: 4px;
+        }
 
-  .ai-spinner {
-    animation: spin 1s linear infinite;
-  }
+        .ai-quick-buttons::-webkit-scrollbar {
+          height: 3px;
+        }
 
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-  }
+        .ai-quick-buttons::-webkit-scrollbar-track {
+          background: transparent;
+        }
 
-  /* ── Quick questions — matches .seg-control / chip feel ── */
-  .ai-quick-questions {
-    padding: 12px 20px 14px;
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
-  }
+        .ai-quick-buttons::-webkit-scrollbar-thumb {
+          background: var(--border2, rgba(0,0,0,0.12));
+          border-radius: 3px;
+        }
 
-  .ai-quick-questions p {
-    font-family: var(--font-mono, 'Geist Mono', monospace);
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--text3);
-    margin-bottom: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
+        .ai-quick-buttons button {
+          padding: 6px 12px;
+          background: var(--surface2);
+          border: 1px solid var(--border);
+          border-radius: 20px;
+          font-family: var(--font-mono, 'Geist Mono', monospace);
+          font-size: 11px;
+          font-weight: 500;
+          color: var(--text2);
+          cursor: pointer;
+          transition: all var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
+          letter-spacing: 0.01em;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
 
-  .ai-quick-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
+        .ai-quick-buttons button:hover {
+          background: var(--surface);
+          border-color: var(--accent, #1a4aff);
+          color: var(--accent, #1a4aff);
+          box-shadow: 0 0 0 2px var(--accent-soft, rgba(26,74,255,0.08));
+        }
 
-  .ai-quick-buttons button {
-    padding: 6px 12px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    font-family: var(--font-mono, 'Geist Mono', monospace);
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text2);
-    cursor: pointer;
-    transition: all var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
-    letter-spacing: 0.01em;
-  }
+        .ai-quick-buttons button:active {
+          transform: scale(0.96);
+        }
 
-  .ai-quick-buttons button:hover {
-    background: var(--surface);
-    border-color: var(--accent, #1a4aff);
-    color: var(--accent, #1a4aff);
-    box-shadow: 0 0 0 2px var(--accent-soft, rgba(26,74,255,0.08));
-  }
+        /* Input row */
+        .ai-modal-input {
+          padding: 12px 0 0;
+          border-top: 1px solid var(--border);
+          display: flex;
+          gap: 9px;
+          align-items: center;
+          flex-shrink: 0;
+        }
 
-  .ai-quick-buttons button:active {
-    transform: scale(0.96);
-  }
+        .ai-modal-input input {
+          flex: 1;
+          padding: 11px 16px;
+          background: var(--surface2);
+          border: 1.5px solid var(--border);
+          border-radius: var(--radius-sm, 10px);
+          font-family: var(--font-body, 'Geist', system-ui, sans-serif);
+          font-size: 13.5px;
+          color: var(--text);
+          outline: none;
+          transition: border-color var(--transition, 200ms cubic-bezier(0.4,0,0.2,1)),
+                      box-shadow var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
+          letter-spacing: -0.01em;
+        }
 
-  /* ── Input row — matches .input-field pattern ── */
-  .ai-modal-input {
-    padding: 12px 20px 14px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    gap: 9px;
-    align-items: center;
-    flex-shrink: 0;
-  }
+        .ai-modal-input input::placeholder {
+          color: var(--text3);
+        }
 
-  .ai-modal-input input {
-    flex: 1;
-    padding: 11px 16px;
-    background: var(--surface2);
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius-sm, 10px);
-    font-family: var(--font-body, 'Geist', system-ui, sans-serif);
-    font-size: 13.5px;
-    color: var(--text);
-    outline: none;
-    transition: border-color var(--transition, 200ms cubic-bezier(0.4,0,0.2,1)),
-                box-shadow var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
-    letter-spacing: -0.01em;
-  }
+        .ai-modal-input input:focus {
+          border-color: var(--accent, #1a4aff);
+          box-shadow: 0 0 0 3px var(--accent-soft, rgba(26,74,255,0.08));
+        }
 
-  .ai-modal-input input::placeholder {
-    color: var(--text3);
-  }
+        .ai-modal-input input:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
 
-  .ai-modal-input input:focus {
-    border-color: var(--accent, #1a4aff);
-    box-shadow: 0 0 0 3px var(--accent-soft, rgba(26,74,255,0.08));
-  }
+        .ai-send-btn {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: var(--text);
+          border: none;
+          color: var(--bg);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
+          flex-shrink: 0;
+        }
 
-  .ai-modal-input input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+        .ai-send-btn:hover:not(:disabled) {
+          opacity: 0.85;
+          transform: scale(1.05);
+        }
 
-  /* Send button — .btn-primary inverted (dark pill) */
-  .ai-send-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: var(--text);
-    border: none;
-    color: var(--bg);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
-    flex-shrink: 0;
-  }
+        .ai-send-btn:active:not(:disabled) {
+          transform: scale(0.96);
+        }
 
-  .ai-send-btn:hover:not(:disabled) {
-    opacity: 0.85;
-    transform: scale(1.05);
-  }
+        .ai-send-btn:disabled {
+          opacity: 0.3;
+          cursor: not-allowed;
+        }
 
-  .ai-send-btn:active:not(:disabled) {
-    transform: scale(0.96);
-  }
+        /* History panel */
+        .ai-modal-history {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: var(--border2, rgba(0,0,0,0.12)) transparent;
+        }
 
-  .ai-send-btn:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-  }
+        .ai-modal-history::-webkit-scrollbar { width: 3px; }
+        .ai-modal-history::-webkit-scrollbar-track { background: transparent; }
+        .ai-modal-history::-webkit-scrollbar-thumb { background: var(--border2, rgba(0,0,0,0.12)); border-radius: 3px; }
 
-  /* ── History panel ── */
-  .ai-modal-history {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border2, rgba(0,0,0,0.12)) transparent;
-  }
+        .ai-history-heading {
+          font-family: var(--font-mono, 'Geist Mono', monospace);
+          font-size: 10px;
+          font-weight: 700;
+          color: var(--text3);
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          margin-bottom: 14px;
+        }
 
-  .ai-modal-history::-webkit-scrollbar { width: 3px; }
-  .ai-modal-history::-webkit-scrollbar-track { background: transparent; }
-  .ai-modal-history::-webkit-scrollbar-thumb { background: var(--border2, rgba(0,0,0,0.12)); border-radius: 3px; }
+        .ai-history-item {
+          background: var(--surface2);
+          border: 1px solid var(--border);
+          border-radius: var(--radius, 14px);
+          padding: 14px;
+          margin-bottom: 10px;
+          transition: box-shadow var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
+        }
 
-  /* History heading — matches .section-title */
-  .ai-history-heading {
-    font-family: var(--font-mono, 'Geist Mono', monospace);
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--text3);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 14px;
-  }
+        .ai-history-item:hover {
+          box-shadow: var(--shadow-sm);
+        }
 
-  /* History item — matches .inv-card */
-  .ai-history-item {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius, 14px);
-    padding: 14px;
-    margin-bottom: 10px;
-    transition: box-shadow var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
-  }
+        .ai-history-question {
+          font-family: var(--font-body, 'Geist', system-ui, sans-serif);
+          font-size: 13px;
+          color: var(--text);
+          margin-bottom: 5px;
+          letter-spacing: -0.01em;
+          line-height: 1.45;
+        }
 
-  .ai-history-item:hover {
-    box-shadow: var(--shadow-sm);
-  }
+        .ai-history-answer {
+          font-family: var(--font-body, 'Geist', system-ui, sans-serif);
+          font-size: 12.5px;
+          color: var(--text2);
+          margin-bottom: 8px;
+          line-height: 1.45;
+        }
 
-  .ai-history-question {
-    font-family: var(--font-body, 'Geist', system-ui, sans-serif);
-    font-size: 13px;
-    color: var(--text);
-    margin-bottom: 5px;
-    letter-spacing: -0.01em;
-    line-height: 1.45;
-  }
+        .ai-history-time {
+          font-family: var(--font-mono, 'Geist Mono', monospace);
+          font-size: 10px;
+          color: var(--text3);
+          letter-spacing: 0.02em;
+        }
 
-  .ai-history-answer {
-    font-family: var(--font-body, 'Geist', system-ui, sans-serif);
-    font-size: 12.5px;
-    color: var(--text2);
-    margin-bottom: 8px;
-    line-height: 1.45;
-  }
+        .ai-empty-history {
+          text-align: center;
+          color: var(--text3);
+          padding: 48px 20px;
+          font-family: var(--font-body, 'Geist', system-ui, sans-serif);
+          font-size: 13px;
+        }
 
-  .ai-history-time {
-    font-family: var(--font-mono, 'Geist Mono', monospace);
-    font-size: 10px;
-    color: var(--text3);
-    letter-spacing: 0.02em;
-  }
+        .ai-back-btn {
+          width: 100%;
+          padding: 11px 16px;
+          background: var(--surface2);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-sm, 10px);
+          font-family: var(--font-body, 'Geist', system-ui, sans-serif);
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--text2);
+          cursor: pointer;
+          margin-top: 10px;
+          transition: all var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
+          letter-spacing: -0.01em;
+        }
 
-  .ai-empty-history {
-    text-align: center;
-    color: var(--text3);
-    padding: 48px 20px;
-    font-family: var(--font-body, 'Geist', system-ui, sans-serif);
-    font-size: 13px;
-  }
+        .ai-back-btn:hover {
+          background: var(--surface);
+          color: var(--text);
+          border-color: var(--border2, rgba(0,0,0,0.12));
+        }
 
-  /* Back button — matches .btn-ghost */
-  .ai-back-btn {
-    width: 100%;
-    padding: 11px 16px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm, 10px);
-    font-family: var(--font-body, 'Geist', system-ui, sans-serif);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text2);
-    cursor: pointer;
-    margin-top: 10px;
-    transition: all var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
-    letter-spacing: -0.01em;
-  }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
 
-  .ai-back-btn:hover {
-    background: var(--surface);
-    color: var(--text);
-    border-color: var(--border2, rgba(0,0,0,0.12));
-  }
-`}</style>
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(60px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes scaleIn {
+          from { opacity: 0; transform: scale(0.92); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 };
