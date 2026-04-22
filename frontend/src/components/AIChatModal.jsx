@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Loader2, Bot, Sparkles, MessageCircle, Trash2, Clock } from 'lucide-react';
+import { X, Send, Loader2, Bot, Sparkles, Trash2, Clock } from 'lucide-react';
 import API from '../api';
 
 const AIChatModal = ({ isOpen, onClose, onInvest }) => {
@@ -14,51 +14,68 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
   const [sessionId, setSessionId] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState([]);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const [modalHeight, setModalHeight] = useState('auto');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
-  const modalRef = useRef(null);
 
-  // Keyboard detection using visualViewport API
+  // Detect keyboard on mobile
   useEffect(() => {
     if (!isOpen) return;
 
-    const handleViewportChange = () => {
+    const handleFocus = () => {
+      // On input focus, wait for keyboard to appear
+      setTimeout(() => {
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+          // Get keyboard height (rough estimate)
+          const viewportHeight = window.visualViewport?.height || window.innerHeight;
+          const windowHeight = window.innerHeight;
+          const estimatedHeight = windowHeight - viewportHeight;
+          if (estimatedHeight > 100) {
+            setKeyboardHeight(estimatedHeight);
+          }
+        }
+      }, 100);
+    };
+
+    const handleBlur = () => {
+      setKeyboardHeight(0);
+    };
+
+    const inputElement = inputRef.current;
+    if (inputElement) {
+      inputElement.addEventListener('focus', handleFocus);
+      inputElement.addEventListener('blur', handleBlur);
+    }
+
+    // Also listen for visualViewport resize (more accurate)
+    const handleViewportResize = () => {
       if (window.visualViewport) {
         const viewportHeight = window.visualViewport.height;
         const windowHeight = window.innerHeight;
-        const isKeyboardOpen = viewportHeight < windowHeight * 0.75;
-        setIsKeyboardVisible(isKeyboardOpen);
-        
-        // Adjust modal height when keyboard is open
-        if (isKeyboardOpen) {
-          setModalHeight(`${viewportHeight - 60}px`); // Subtract header height
+        const diff = windowHeight - viewportHeight;
+        if (diff > 100) {
+          setKeyboardHeight(diff);
         } else {
-          setModalHeight('auto');
+          setKeyboardHeight(0);
         }
       }
     };
 
-    window.visualViewport?.addEventListener('resize', handleViewportChange);
-    window.visualViewport?.addEventListener('scroll', handleViewportChange);
-    
-    // Initial check
-    handleViewportChange();
+    window.visualViewport?.addEventListener('resize', handleViewportResize);
 
     return () => {
-      window.visualViewport?.removeEventListener('resize', handleViewportChange);
-      window.visualViewport?.removeEventListener('scroll', handleViewportChange);
+      if (inputElement) {
+        inputElement.removeEventListener('focus', handleFocus);
+        inputElement.removeEventListener('blur', handleBlur);
+      }
+      window.visualViewport?.removeEventListener('resize', handleViewportResize);
     };
   }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-        // Scroll to bottom when keyboard opens
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 150);
+      setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [isOpen]);
 
@@ -77,28 +94,16 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
-
     const userMessage = input.trim();
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setIsLoading(true);
-
     try {
-      const res = await API.post('/ai/chat', { 
-        message: userMessage,
-        sessionId 
-      });
-
-      if (res.data.sessionId && !sessionId) {
-        setSessionId(res.data.sessionId);
-      }
-
+      const res = await API.post('/ai/chat', { message: userMessage, sessionId });
+      if (res.data.sessionId && !sessionId) setSessionId(res.data.sessionId);
       setMessages(prev => [...prev, { role: 'assistant', content: res.data.response }]);
     } catch (error) {
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: error.response?.data?.response || "Sorry, I'm having trouble connecting. Please try again." 
-      }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: error.response?.data?.response || "Sorry, I'm having trouble connecting. Please try again." }]);
     } finally {
       setIsLoading(false);
     }
@@ -120,12 +125,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
   };
 
   const handleClearChat = () => {
-    setMessages([
-      { 
-        role: 'assistant', 
-        content: "👋 Chat cleared! How can I help you with your investment decisions today?" 
-      }
-    ]);
+    setMessages([{ role: 'assistant', content: "👋 Chat cleared! How can I help you with your investment decisions today?" }]);
     setSessionId(null);
   };
 
@@ -138,17 +138,14 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
   if (!isOpen) return null;
 
+  // Dynamic bottom padding to lift modal above keyboard
+  const modalStyle = keyboardHeight > 0 ? { transform: `translateY(-${keyboardHeight}px)` } : {};
+
   return (
     <div className="ai-modal-overlay" onClick={onClose}>
-      <div 
-        ref={modalRef}
-        className={`ai-modal-sheet ${isKeyboardVisible ? 'keyboard-active' : ''}`}
-        style={modalHeight !== 'auto' ? { height: modalHeight } : {}}
-        onClick={e => e.stopPropagation()}
-      >
+      <div className="ai-modal-sheet" style={modalStyle} onClick={e => e.stopPropagation()}>
         <div className="ai-modal-handle" />
         
-        {/* Header */}
         <div className="ai-modal-header">
           <div className="ai-modal-header-left">
             <div className="ai-modal-avatar">
@@ -160,14 +157,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
             </div>
           </div>
           <div className="ai-modal-header-actions">
-            <button 
-              className="ai-icon-btn" 
-              onClick={() => {
-                setShowHistory(!showHistory);
-                if (!showHistory) loadHistory();
-              }}
-              title="Chat History"
-            >
+            <button className="ai-icon-btn" onClick={() => { setShowHistory(!showHistory); if (!showHistory) loadHistory(); }} title="Chat History">
               <Clock size={15} />
             </button>
             <button className="ai-icon-btn" onClick={handleClearChat} title="Clear Chat">
@@ -179,7 +169,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           </div>
         </div>
 
-        {/* Body */}
         {showHistory ? (
           <div className="ai-modal-history">
             <p className="ai-history-heading">Recent Conversations</p>
@@ -194,9 +183,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
                 </div>
               ))
             )}
-            <button className="ai-back-btn" onClick={() => setShowHistory(false)}>
-              ← Back to Chat
-            </button>
+            <button className="ai-back-btn" onClick={() => setShowHistory(false)}>← Back to Chat</button>
           </div>
         ) : (
           <>
@@ -208,39 +195,30 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
                       <Sparkles size={11} />
                     </div>
                   )}
-                  <div className="ai-message-bubble">
-                    {msg.content}
-                  </div>
+                  <div className="ai-message-bubble">{msg.content}</div>
                 </div>
               ))}
               {isLoading && (
                 <div className="ai-message assistant">
-                  <div className="ai-message-avatar">
-                    <Loader2 size={11} className="ai-spinner" />
-                  </div>
-                  <div className="ai-message-bubble ai-typing">
-                    <span>●</span><span>●</span><span>●</span>
-                  </div>
+                  <div className="ai-message-avatar"><Loader2 size={11} className="ai-spinner" /></div>
+                  <div className="ai-message-bubble ai-typing"><span>●</span><span>●</span><span>●</span></div>
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Questions - Hidden when keyboard is visible */}
-            {messages.length <= 1 && !isKeyboardVisible && (
+            {/* Quick questions - hide when keyboard is open */}
+            {messages.length <= 1 && keyboardHeight === 0 && (
               <div className="ai-quick-questions">
-                <p>Suggested questions</p>
+                <p>SUGGESTED QUESTIONS</p>
                 <div className="ai-quick-buttons">
                   {quickQuestions.map((q, idx) => (
-                    <button key={idx} onClick={() => handleQuickQuestion(q.prompt)}>
-                      {q.text}
-                    </button>
+                    <button key={idx} onClick={() => handleQuickQuestion(q.prompt)}>{q.text}</button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Input */}
             <div className="ai-modal-input">
               <input
                 ref={inputRef}
@@ -251,11 +229,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
                 onKeyPress={handleKeyPress}
                 disabled={isLoading}
               />
-              <button 
-                onClick={handleSend} 
-                disabled={!input.trim() || isLoading}
-                className="ai-send-btn"
-              >
+              <button onClick={handleSend} disabled={!input.trim() || isLoading} className="ai-send-btn">
                 <Send size={15} />
               </button>
             </div>
@@ -285,7 +259,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           }
         }
 
-        /* Modal sheet */
         .ai-modal-sheet {
           background: var(--surface);
           width: 100%;
@@ -297,17 +270,9 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           border-bottom: none;
           display: flex;
           flex-direction: column;
-          transition: all 0.2s ease;
+          transition: transform 0.2s ease;
           max-height: 85vh;
-          height: auto;
           overflow: hidden;
-        }
-
-        /* Keyboard active styles */
-        .ai-modal-sheet.keyboard-active {
-          max-height: 50vh;
-          border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
-          padding-bottom: 12px;
         }
 
         @media (min-width: 640px) {
@@ -316,11 +281,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
             animation: scaleIn 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
             border-bottom: 1px solid var(--border);
             max-height: 85vh;
-          }
-          
-          .ai-modal-sheet.keyboard-active {
-            max-height: 85vh;
-            border-radius: var(--radius-xl, 28px);
           }
         }
 
@@ -339,7 +299,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           }
         }
 
-        /* Header */
         .ai-modal-header {
           display: flex;
           align-items: center;
@@ -400,7 +359,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all var(--transition, 200ms cubic-bezier(0.4,0,0.2,1));
+          transition: all 200ms cubic-bezier(0.4,0,0.2,1);
         }
 
         .ai-icon-btn:hover {
@@ -412,7 +371,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           transform: scale(0.95);
         }
 
-        /* Messages area */
         .ai-modal-messages {
           flex: 1;
           min-height: 0;
@@ -426,15 +384,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
         .ai-modal-messages::-webkit-scrollbar {
           width: 3px;
-        }
-
-        .ai-modal-messages::-webkit-scrollbar-track {
-          background: transparent;
-        }
-
-        .ai-modal-messages::-webkit-scrollbar-thumb {
-          background: var(--border2);
-          border-radius: 3px;
         }
 
         .ai-message {
@@ -471,7 +420,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           font-family: var(--font-body, 'Geist', system-ui, sans-serif);
           font-size: 13px;
           line-height: 1.5;
-          letter-spacing: -0.01em;
         }
 
         .ai-message.user .ai-message-bubble {
@@ -497,15 +445,11 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
         .ai-typing span {
           font-size: 10px;
           animation: bounce 1.4s infinite ease-in-out both;
-          color: var(--text3);
         }
 
-        .ai-typing span:nth-child(1) { animation-delay: -0.32s; }
-        .ai-typing span:nth-child(2) { animation-delay: -0.16s; }
-
         @keyframes bounce {
-          0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
-          40%           { transform: scale(1.2); opacity: 1; }
+          0%,80%,100% { transform: scale(0.8); opacity:0.5; }
+          40% { transform: scale(1.2); opacity:1; }
         }
 
         .ai-spinner {
@@ -514,10 +458,9 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
 
         @keyframes spin {
           from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
+          to { transform: rotate(360deg); }
         }
 
-        /* Quick questions - Horizontal scroll */
         .ai-quick-questions {
           padding: 12px 0 0;
           border-top: 1px solid var(--border);
@@ -548,15 +491,6 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           height: 3px;
         }
 
-        .ai-quick-buttons::-webkit-scrollbar-track {
-          background: transparent;
-        }
-
-        .ai-quick-buttons::-webkit-scrollbar-thumb {
-          background: var(--border2);
-          border-radius: 3px;
-        }
-
         .ai-quick-buttons button {
           padding: 6px 12px;
           background: var(--surface2);
@@ -567,24 +501,17 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           font-weight: 500;
           color: var(--text2);
           cursor: pointer;
-          transition: all var(--transition);
-          letter-spacing: 0.01em;
           white-space: nowrap;
           flex-shrink: 0;
+          transition: all 200ms cubic-bezier(0.4,0,0.2,1);
         }
 
         .ai-quick-buttons button:hover {
           background: var(--surface);
           border-color: var(--accent, #1a4aff);
           color: var(--accent, #1a4aff);
-          box-shadow: 0 0 0 2px var(--accent-soft);
         }
 
-        .ai-quick-buttons button:active {
-          transform: scale(0.96);
-        }
-
-        /* Input row */
         .ai-modal-input {
           padding: 12px 0 0;
           border-top: 1px solid var(--border);
@@ -593,6 +520,7 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           align-items: center;
           flex-shrink: 0;
           margin-top: 4px;
+          background: var(--surface);
         }
 
         .ai-modal-input input {
@@ -605,21 +533,11 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           font-size: 13px;
           color: var(--text);
           outline: none;
-          transition: all var(--transition);
-        }
-
-        .ai-modal-input input::placeholder {
-          color: var(--text3);
         }
 
         .ai-modal-input input:focus {
           border-color: var(--accent, #1a4aff);
           box-shadow: 0 0 0 3px var(--accent-soft);
-        }
-
-        .ai-modal-input input:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
         }
 
         .ai-send-btn {
@@ -633,8 +551,8 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all var(--transition);
           flex-shrink: 0;
+          transition: all 200ms cubic-bezier(0.4,0,0.2,1);
         }
 
         .ai-send-btn:hover:not(:disabled) {
@@ -642,34 +560,15 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           transform: scale(1.05);
         }
 
-        .ai-send-btn:active:not(:disabled) {
-          transform: scale(0.96);
-        }
-
         .ai-send-btn:disabled {
           opacity: 0.3;
           cursor: not-allowed;
         }
 
-        /* History panel */
         .ai-modal-history {
           flex: 1;
           min-height: 0;
           overflow-y: auto;
-          scrollbar-width: thin;
-        }
-
-        .ai-modal-history::-webkit-scrollbar {
-          width: 3px;
-        }
-
-        .ai-modal-history::-webkit-scrollbar-track {
-          background: transparent;
-        }
-
-        .ai-modal-history::-webkit-scrollbar-thumb {
-          background: var(--border2);
-          border-radius: 3px;
         }
 
         .ai-history-heading {
@@ -691,26 +590,21 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
         }
 
         .ai-history-question {
-          font-family: var(--font-body, 'Geist', system-ui, sans-serif);
           font-size: 12px;
           color: var(--text);
           margin-bottom: 5px;
-          line-height: 1.45;
         }
 
         .ai-history-answer {
-          font-family: var(--font-body, 'Geist', system-ui, sans-serif);
           font-size: 11.5px;
           color: var(--text2);
           margin-bottom: 6px;
-          line-height: 1.45;
         }
 
         .ai-history-time {
           font-family: var(--font-mono, 'Geist Mono', monospace);
           font-size: 9px;
           color: var(--text3);
-          letter-spacing: 0.02em;
         }
 
         .ai-empty-history {
@@ -726,19 +620,11 @@ const AIChatModal = ({ isOpen, onClose, onInvest }) => {
           background: var(--surface2);
           border: 1px solid var(--border);
           border-radius: var(--radius-sm, 10px);
-          font-family: var(--font-body, 'Geist', system-ui, sans-serif);
           font-size: 13px;
           font-weight: 500;
           color: var(--text2);
           cursor: pointer;
           margin-top: 10px;
-          transition: all var(--transition);
-        }
-
-        .ai-back-btn:hover {
-          background: var(--surface);
-          color: var(--text);
-          border-color: var(--border2);
         }
 
         @keyframes fadeIn {
